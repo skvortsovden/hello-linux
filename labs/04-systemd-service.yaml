@@ -1,0 +1,77 @@
+id: systemd-service
+name: "Create a systemd Service"
+description: |
+  ## Objective
+  Write a shell script that prints `hello linux` every 5 seconds, wrap it in
+  a systemd service unit, start it, verify it is running, and ensure it
+  starts automatically on boot.
+
+  ## Steps
+
+  ### 1. Create the script
+  ```
+  cat > /challenge/hello.sh << 'EOF'
+  #!/bin/bash
+  while true; do
+    echo "hello linux"
+    sleep 5
+  done
+  EOF
+  ```
+  Make it executable:
+  ```
+  chmod +x /challenge/hello.sh
+  ```
+
+  ### 2. Create the service unit file
+  ```
+  cat > /etc/systemd/system/hello.service << 'EOF'
+  [Unit]
+  Description=Hello Linux Service
+
+  [Service]
+  ExecStart=/challenge/hello.sh
+  Restart=always
+
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  ```
+
+  ### 3. Reload systemd and start the service
+  ```
+  systemctl daemon-reload
+  systemctl start hello
+  ```
+
+  ### 4. Verify the service is running
+  ```
+  systemctl status hello
+  ```
+
+  ### 5. Enable the service to start on boot
+  ```
+  systemctl enable hello
+  ```
+
+  ## Hints
+  - `systemctl is-active hello` prints `active` if the service is running.
+  - `systemctl is-enabled hello` prints `enabled` if it will start at boot.
+  - `journalctl -u hello -f` follows the live log output of the service.
+  - The `[Install]` section and `systemctl enable` work together — without
+    `WantedBy=multi-user.target` the unit cannot be enabled.
+
+type: container
+image: ubuntu:24.04
+systemd: true
+given:
+  - command: "mkdir -p /challenge"
+expected:
+  - description: "/challenge/hello.sh must exist and be executable"
+    check: "test -x /challenge/hello.sh"
+  - description: "/etc/systemd/system/hello.service must exist"
+    check: "test -f /etc/systemd/system/hello.service"
+  - description: "hello service must be active (running)"
+    check: "systemctl is-active hello"
+  - description: "hello service must be enabled (starts on boot)"
+    check: "systemctl is-enabled hello"

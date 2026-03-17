@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab — hello-linux</title>
+  <link rel="stylesheet" href="/style.css" />
+
+  <!-- xterm.js -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
+  <!-- marked (Markdown renderer) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <a href="/" class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+      </svg>
+      hello-linux
+    </a>
+    <a href="/" class="back-link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      Back to Labs
+    </a>
+  </header>
+
+  <!-- Two-column lab layout -->
+  <div class="lab-layout">
+
+    <!-- ── Left panel: instructions ── -->
+    <aside class="lab-panel-left">
+      <div class="panel-body">
+        <h1 class="lab-title">
+          <span id="lab-name">Loading…</span>
+          <span id="env-badge" class="badge" style="display:none"></span>
+        </h1>
+        <div id="lab-description" class="lab-description"></div>
+      </div>
+
+      <div class="panel-footer">
+        <button id="check-btn" class="btn-check" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          Check Solution
+        </button>
+        <div id="result" class="result"></div>
+      </div>
+    </aside>
+
+    <!-- ── Right panel: terminal ── -->
+    <section class="lab-panel-right" style="position:relative">
+
+      <!-- Status overlay (shown while provisioning) -->
+      <div id="terminal-overlay" class="terminal-status">
+        <div class="spinner"></div>
+        <p id="status-text" class="status-text">Provisioning lab environment…</p>
+      </div>
+
+      <!-- macOS-style terminal title bar -->
+      <div class="terminal-topbar">
+        <span class="terminal-dot dot-red"></span>
+        <span class="terminal-dot dot-yellow"></span>
+        <span class="terminal-dot dot-green"></span>
+        <span class="terminal-label" id="terminal-label">bash</span>
+      </div>
+
+      <div id="terminal-container"></div>
+    </section>
+  </div>
+
+  <script>
+    // ── Globals ──────────────────────────────────────────────────────────────
+    const labId     = location.pathname.split('/').filter(Boolean).pop();
+    let   sessionId = null;
+    let   term      = null;
+    let   fitAddon  = null;
+    let   ws        = null;
+    let   cleanedUp = false;
+
+    const overlay     = document.getElementById('terminal-overlay');
+    const statusText  = document.getElementById('status-text');
+    const checkBtn    = document.getElementById('check-btn');
+    const resultEl    = document.getElementById('result');
+
+    // ── Initialise ───────────────────────────────────────────────────────────
+    async function init() {
+      // 1. Fetch lab metadata
+      let lab;
+      try {
+        const r = await fetch(`/api/labs/${labId}`);
+        if (!r.ok) throw new Error(`Lab "${labId}" not found`);
+        lab = await r.json();
+      } catch (err) {
+        showFatalError(err.message);
+        return;
+      }
+
+      document.title = `${lab.name} — hello-linux`;
+      document.getElementById('lab-name').textContent = lab.name;
+
+      const badgeEl = document.getElementById('env-badge');
+      badgeEl.textContent  = lab.type === 'container' ? 'Container' : lab.type === 'virtual-machine' ? 'VM' : lab.type;
+      badgeEl.className    = `badge ${lab.type === 'container' ? 'badge-container' : lab.type === 'virtual-machine' ? 'badge-vm' : 'badge-unknown'}`;
+      badgeEl.style.display = '';
+
+      document.getElementById('lab-description').innerHTML =
+        marked.parse(lab.description || '_No description provided._');
+      document.getElementById('terminal-label').textContent = `${lab.image} — bash`;
+
+      // 2. Create terminal (hidden until connected)
+      initTerminal();
+
+      // 3. Provision environment
+      setStatus('Provisioning lab environment…');
+      try {
+        const r = await fetch('/api/session', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ labId }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed to create session');
+        sessionId = data.sessionId;
+      } catch (err) {
+        showFatalError(`Could not start lab: ${err.message}`);
+        return;
+      }
+
+      // 4. Connect WebSocket
+      setStatus('Connecting terminal…');
+      connectWs();
+    }
+
+    // ── xterm.js ─────────────────────────────────────────────────────────────
+    function initTerminal() {
+      term = new Terminal({
+        cursorBlink: true,
+        fontSize:    14,
+        fontFamily:  "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        theme: {
+          background:          '#1e1e2e',
+          foreground:          '#cdd6f4',
+          cursor:              '#f5e0dc',
+          cursorAccent:        '#1e1e2e',
+          selectionBackground: '#585b7066',
+          black:               '#45475a', brightBlack:   '#585b70',
+          red:                 '#f38ba8', brightRed:     '#f38ba8',
+          green:               '#a6e3a1', brightGreen:   '#a6e3a1',
+          yellow:              '#f9e2af', brightYellow:  '#f9e2af',
+          blue:                '#89b4fa', brightBlue:    '#89b4fa',
+          magenta:             '#f5c2e7', brightMagenta: '#f5c2e7',
+          cyan:                '#89dceb', brightCyan:    '#89dceb',
+          white:               '#bac2de', brightWhite:   '#a6adc8',
+        },
+        allowTransparency: false,
+        scrollback:        3000,
+      });
+
+      fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(document.getElementById('terminal-container'));
+      fitAddon.fit();
+
+      // Resize when the window changes
+      const ro = new ResizeObserver(() => { if (fitAddon) fitAddon.fit(); });
+      ro.observe(document.getElementById('terminal-container'));
+
+      term.onResize(({ cols, rows }) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+        }
+      });
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    function connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const cols  = term ? term.cols : 80;
+      const rows  = term ? term.rows : 24;
+
+      ws = new WebSocket(`${proto}//${location.host}/ws/${sessionId}?cols=${cols}&rows=${rows}`);
+
+      ws.onopen = () => {
+        hideOverlay();
+        checkBtn.disabled = false;
+        term.focus();
+      };
+
+      ws.onmessage = evt => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'data') {
+            term.write(msg.data);
+          } else if (msg.type === 'exit') {
+            term.write(`\r\n\x1b[90m[Process exited with code ${msg.exitCode}]\x1b[0m\r\n`);
+            checkBtn.disabled = true;
+          }
+        } catch (_) {
+          term.write(evt.data);
+        }
+      };
+
+      ws.onclose = () => {
+        if (!cleanedUp) {
+          term.write('\r\n\x1b[90m[Connection closed]\x1b[0m\r\n');
+        }
+        checkBtn.disabled = true;
+      };
+
+      ws.onerror = () => {
+        term.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
+      };
+
+      term.onData(data => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'input', data }));
+        }
+      });
+    }
+
+    // ── Check Solution ────────────────────────────────────────────────────────
+    checkBtn.addEventListener('click', async () => {
+      if (!sessionId) return;
+
+      checkBtn.disabled    = true;
+      checkBtn.textContent = 'Checking…';
+      resultEl.className   = 'result result-checking visible';
+      resultEl.textContent = 'Running checks…';
+
+      try {
+        const r    = await fetch(`/api/validate/${sessionId}`, { method: 'POST' });
+        const data = await r.json();
+
+        if (data.passed) {
+          resultEl.className = 'result result-pass visible';
+          resultEl.innerHTML = '✅ All checks passed! Great work!';
+        } else {
+          const lines = (data.results || [])
+            .filter(c => !c.passed)
+            .map(c => `❌ ${escHtml(c.description)}${c.error ? `<br><small style="opacity:.7">${escHtml(c.error)}</small>` : ''}`)
+            .join('<br>');
+          resultEl.className = 'result result-fail visible';
+          resultEl.innerHTML = lines || '❌ Solution check failed.';
+        }
+      } catch (err) {
+        resultEl.className = 'result result-fail visible';
+        resultEl.textContent = `❌ Error: ${err.message}`;
+      } finally {
+        checkBtn.disabled    = false;
+        checkBtn.innerHTML   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Check Solution`;
+      }
+    });
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    function cleanup() {
+      if (cleanedUp || !sessionId) return;
+      cleanedUp = true;
+      // sendBeacon is the most reliable way to fire-and-forget on page unload
+      navigator.sendBeacon(`/api/session/${sessionId}/destroy`);
+      if (ws) ws.close();
+    }
+
+    window.addEventListener('pagehide', cleanup);
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    function setStatus(msg) {
+      overlay.classList.remove('hidden');
+      statusText.textContent = msg;
+    }
+
+    function hideOverlay() {
+      overlay.classList.add('hidden');
+    }
+
+    function showFatalError(msg) {
+      overlay.innerHTML = `
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <p style="color:#f87171;font-weight:600">${escHtml(msg)}</p>
+        <a href="/" style="color:#7c6af7;font-size:.875rem">← Back to labs</a>`;
+    }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+id: create-file
+name: "Create Your First File"
+description: |
+  ## Objective
+  Create a file named `hello.txt` inside the `/challenge` directory.
+
+  ## Steps
+  1. Navigate to the challenge directory:
+     ```
+     cd /challenge
+     ```
+  2. Create the file using `touch`:
+     ```
+     touch hello.txt
+     ```
+  3. Verify it exists:
+     ```
+     ls /challenge/
+     ```
+
+  ## Hints
+  - The `touch` command creates an empty file if it doesn't already exist.
+  - The full path that will be checked is `/challenge/hello.txt`.
+
+type: container
+image: alpine:latest
+given:
+  - command: "mkdir -p /challenge"
+expected:
+  - description: "/challenge/hello.txt must exist"
+    check: "test -f /challenge/hello.txt"

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hello-linux — Labs</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <a href="/" class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+      </svg>
+      hello-linux
+    </a>
+  </header>
+
+  <!-- Hero -->
+  <section class="home-hero">
+    <h1>Linux Learning Portal</h1>
+    <p>Hands-on exercises in real, isolated Linux environments — all in your browser.</p>
+  </section>
+
+  <!-- Lab grid -->
+  <main class="labs-grid" id="labs-grid">
+    <!-- populated by JS -->
+  </main>
+
+  <script>
+    async function loadLabs() {
+      const grid = document.getElementById('labs-grid');
+
+      // Show skeletons while loading
+      grid.innerHTML = Array.from({ length: 4 }).map(() => `
+        <div class="lab-card" style="pointer-events:none; opacity:0.5">
+          <div class="skeleton" style="height:18px; width:60%; margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px; width:90%"></div>
+          <div class="skeleton" style="height:12px; width:75%; margin-top:4px"></div>
+        </div>
+      `).join('');
+
+      try {
+        const res  = await fetch('/api/labs');
+        const labs = await res.json();
+
+        if (!labs.length) {
+          grid.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+              </svg>
+              <h2>No labs found</h2>
+              <p>Add <code>.yaml</code> files to the <code>labs/</code> directory to get started.</p>
+            </div>`;
+          return;
+        }
+
+        grid.innerHTML = labs.map(lab => {
+          const typeLabel = lab.type === 'container' ? 'Container'
+                          : lab.type === 'virtual-machine' ? 'VM'
+                          : lab.type;
+          const badgeClass = lab.type === 'container' ? 'badge-container'
+                           : lab.type === 'virtual-machine' ? 'badge-vm'
+                           : 'badge-unknown';
+
+          // Strip markdown for preview
+          const plainDesc = (lab.description || '')
+            .replace(/#{1,6}\s/g, '')
+            .replace(/[*_`]/g, '')
+            .trim();
+
+          return `
+            <div class="lab-card" onclick="location.href='/labs/${lab.id}'" role="link" tabindex="0"
+                 onkeydown="if(event.key==='Enter')location.href='/labs/${lab.id}'">
+              <div class="lab-card-header">
+                <h2>${escHtml(lab.name)}</h2>
+                <span class="badge ${badgeClass}">${escHtml(typeLabel)}</span>
+              </div>
+              <p class="lab-card-desc">${escHtml(plainDesc)}</p>
+              <div class="lab-card-arrow">
+                Start lab
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                  <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+              </div>
+            </div>`;
+        }).join('');
+
+      } catch (err) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <h2>Failed to load labs</h2>
+            <p>${escHtml(err.message)}</p>
+          </div>`;
+      }
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    loadLabs();
+  </script>
+</body>
+</html>

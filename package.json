@@ -1,0 +1,23 @@
+{
+  "name": "hello-linux",
+  "version": "1.0.0",
+  "description": "Self-hosted browser-based Linux learning platform",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null; chmod +x node_modules/node-pty/prebuilds/darwin-x64/spawn-helper 2>/dev/null; true"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "express": "^4.18.2",
+    "js-yaml": "^4.1.0",
+    "marked": "^12.0.0",
+    "node-pty": "^1.1.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.16.0"
+  }
+}

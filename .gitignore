@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Runtime / temp
+.env
+.env.*
+tmp/
+/tmp/
+
+# Podman / container leftovers
+*.qcow2
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

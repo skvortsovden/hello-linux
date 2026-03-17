@@ -1,0 +1,30 @@
+id: write-to-file
+name: "Write Content to a File"
+description: |
+  ## Objective
+  Write the word `hello` into the file `/challenge/hello.txt`.
+
+  ## Steps
+  1. Create the file with content using `echo` and redirection:
+     ```
+     echo "hello" > /challenge/hello.txt
+     ```
+  2. Verify the content was written:
+     ```
+     cat /challenge/hello.txt
+     ```
+
+  ## Hints
+  - `>` redirects output and **overwrites** the file.
+  - `>>` appends to an existing file.
+  - `cat` prints the contents of a file to the terminal.
+
+type: container
+image: alpine:latest
+given:
+  - command: "mkdir -p /challenge"
+expected:
+  - description: "/challenge/hello.txt must exist"
+    check: "test -f /challenge/hello.txt"
+  - description: "File must contain the word 'hello'"
+    check: "grep -q 'hello' /challenge/hello.txt"
