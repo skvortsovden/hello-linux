@@ -1,0 +1,40 @@
+id: hello-script
+name: "Create Your First Script"
+level: junior
+description: |
+  Write a shell script at `/challenge/hello.sh` that prints `hello linux`
+  every 5 seconds in an infinite loop, then make it executable and run it.
+solution: |
+  ## Steps
+  1. Create the script:
+     ```
+     cat > /challenge/hello.sh << 'EOF'
+     #!/bin/bash
+     while true; do
+       echo "hello linux"
+       sleep 5
+     done
+     EOF
+     ```
+  2. Make it executable:
+     ```
+     chmod +x /challenge/hello.sh
+     ```
+  3. Run it to verify the output:
+     ```
+     /challenge/hello.sh
+     ```
+
+type: container
+image: ubuntu:24.04
+given:
+  - command: "mkdir -p /challenge"
+expected:
+  - description: "/challenge/hello.sh must exist"
+    check: "test -f /challenge/hello.sh"
+  - description: "/challenge/hello.sh must be executable"
+    check: "test -x /challenge/hello.sh"
+  - description: "script must contain 'hello linux'"
+    check: "grep -q 'hello linux' /challenge/hello.sh"
+  - description: "script must contain a sleep command"
+    check: "grep -q 'sleep' /challenge/hello.sh"

@@ -1,0 +1,78 @@
+id: ssh-server
+name: "Set Up an SSH Server"
+level: medior
+description: |
+  ## Objective
+  Install and configure an OpenSSH server so that a remote host can connect
+  via SSH. You will:
+  - Install `openssh-server`
+  - Ensure the SSH daemon is running
+  - Create a user `sshuser` with a password so a client can authenticate
+  - Verify the server is listening on port **22**
+
+  ## Background
+  SSH (Secure Shell) is the standard protocol for encrypted remote access to
+  Linux machines. The server side is handled by `sshd` — the OpenSSH daemon.
+  Once running, any client on the network can connect with:
+  ```
+  ssh sshuser@<host-ip>
+  ```
+
+  ## Hints
+  - Install the package: `apt-get install -y openssh-server`
+  - Start the daemon: `service ssh start` (or `systemctl start ssh`)
+  - Create the user and set a password:
+    ```
+    useradd -m -s /bin/bash sshuser
+    echo "sshuser:password123" | chpasswd
+    ```
+  - Check the daemon is listening: `ss -tlnp | grep :22`
+  - The default config at `/etc/ssh/sshd_config` allows password auth by default.
+
+solution: |
+  ## Steps
+
+  ### 1. Install OpenSSH server
+  ```
+  apt-get update && apt-get install -y openssh-server
+  ```
+
+  ### 2. Create the privilege separation directory (required by sshd)
+  ```
+  mkdir -p /run/sshd
+  ```
+
+  ### 3. Start the SSH daemon
+  ```
+  /usr/sbin/sshd
+  ```
+
+  ### 4. Create a user and set a password
+  ```
+  useradd -m -s /bin/bash sshuser
+  echo "sshuser:password123" | chpasswd
+  ```
+
+  ### 5. Verify sshd is listening on port 22
+  ```
+  ss -tlnp | grep :22
+  ```
+
+  ### 6. From another host, connect with
+  ```
+  ssh sshuser@<container-ip>
+  ```
+
+type: container
+image: ubuntu:24.04
+given:
+  - command: "mkdir -p /challenge"
+expected:
+  - description: "openssh-server must be installed"
+    check: "dpkg -l openssh-server | grep -q '^ii'"
+  - description: "sshd must be listening on port 22"
+    check: "ss -tlnp | grep -q ':22'"
+  - description: "user 'sshuser' must exist"
+    check: "id sshuser"
+  - description: "sshuser must have a home directory"
+    check: "test -d /home/sshuser"

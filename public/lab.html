@@ -88,6 +88,9 @@
     </section>
   </div>
 
+  <!-- Confetti canvas (pass celebration) -->
+  <canvas id="confetti-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:999;display:none"></canvas>
+
   <script>
     // ── Globals ──────────────────────────────────────────────────────────────
     const labId     = location.pathname.split('/').filter(Boolean).pop();
@@ -261,6 +264,7 @@
         if (data.passed) {
           resultEl.className = 'result result-pass visible';
           resultEl.innerHTML = '✅ All checks passed! Great work!';
+          launchConfetti();
         } else {
           const lines = (data.results || [])
             .filter(c => !c.passed)
@@ -314,6 +318,65 @@
       return String(s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ── Confetti ──────────────────────────────────────────────────────────────
+    function launchConfetti() {
+      const canvas = document.getElementById('confetti-canvas');
+      const ctx    = canvas.getContext('2d');
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+      canvas.style.display = '';
+
+      const COLORS  = ['#d9a441', '#c97a40', '#4ade80', '#60a5fa', '#f472b6', '#a78bfa', '#fff'];
+      const COUNT   = 120;
+      const gravity = 0.45;
+      const drag    = 0.97;
+
+      const pieces = Array.from({ length: COUNT }, () => ({
+        x:    Math.random() * canvas.width,
+        y:    Math.random() * canvas.height * 0.4 - canvas.height * 0.1,
+        vx:   (Math.random() - 0.5) * 9,
+        vy:   Math.random() * -10 - 4,
+        w:    Math.random() * 10 + 5,
+        h:    Math.random() * 5  + 3,
+        rot:  Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.25,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        alpha: 1,
+      }));
+
+      let frame;
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = false;
+        for (const p of pieces) {
+          p.vy  += gravity;
+          p.vx  *= drag;
+          p.x   += p.vx;
+          p.y   += p.vy;
+          p.rot += p.spin;
+          if (p.y > canvas.height * 0.6) p.alpha -= 0.025;
+          if (p.alpha <= 0) continue;
+          alive = true;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.alpha);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+          ctx.restore();
+        }
+        if (alive) {
+          frame = requestAnimationFrame(draw);
+        } else {
+          canvas.style.display = 'none';
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      cancelAnimationFrame(frame);
+      draw();
     }
 
     function toggleSolution() {

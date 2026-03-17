@@ -4,15 +4,11 @@ description: |
   Create a file named `hello.txt` inside the `/challenge` directory.
 solution: |
   ## Steps
-  1. Navigate to the challenge directory:
+  1. Create the file using `touch`:
      ```
-     cd /challenge
+     touch /challenge/hello.txt
      ```
-  2. Create the file using `touch`:
-     ```
-     touch hello.txt
-     ```
-  3. Verify it exists:
+  2. Verify it exists:
      ```
      ls /challenge/
      ```
