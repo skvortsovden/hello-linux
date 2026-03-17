@@ -39,6 +39,7 @@ Minimal lab schema:
 ```yaml
 id: my-lab-id           # used in URL: /labs/my-lab-id
 name: "My Lab Name"
+level: junior           # junior | medior | senior (shown as a badge)
 description: |          # Markdown, shown in the left panel
   ## Objective
   Do something useful.

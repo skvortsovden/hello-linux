@@ -61,12 +61,9 @@
         }
 
         grid.innerHTML = labs.map(lab => {
-          const typeLabel = lab.type === 'container' ? 'Container'
-                          : lab.type === 'virtual-machine' ? 'VM'
-                          : lab.type;
-          const badgeClass = lab.type === 'container' ? 'badge-container'
-                           : lab.type === 'virtual-machine' ? 'badge-vm'
-                           : 'badge-unknown';
+          const level      = (lab.level || '').toLowerCase();
+          const levelLabel = level ? (level.charAt(0).toUpperCase() + level.slice(1)) : null;
+          const levelClass = level ? `badge-${level}` : 'badge-unknown';
 
           // Strip markdown for preview
           const plainDesc = (lab.description || '')
@@ -79,7 +76,7 @@
                  onkeydown="if(event.key==='Enter')location.href='/labs/${lab.id}'">
               <div class="lab-card-header">
                 <h2>${escHtml(lab.name)}</h2>
-                <span class="badge ${badgeClass}">${escHtml(typeLabel)}</span>
+                ${levelLabel ? `<span class="badge ${levelClass}">${escHtml(levelLabel)}</span>` : ''}
               </div>
               <p class="lab-card-desc">${escHtml(plainDesc)}</p>
               <div class="lab-card-arrow">

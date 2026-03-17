@@ -35,6 +35,7 @@ app.get('/api/labs', (_req, res) => {
     name:        lab.name,
     description: lab.description,
     type:        lab.type,
+    level:       lab.level,
   }));
   res.json(list);
 });
@@ -47,7 +48,9 @@ app.get('/api/labs/:id', (req, res) => {
     id:          lab.id,
     name:        lab.name,
     description: lab.description,
+    solution:    lab.solution,
     type:        lab.type,
+    level:       lab.level,
     image:       lab.image,
   });
 });

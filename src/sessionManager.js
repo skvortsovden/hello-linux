@@ -24,7 +24,10 @@ async function createSession(lab) {
 
   let env;
   if (lab.type === 'container') {
-    env = await provisionContainer(lab.image, lab.given, envName, { systemd: !!lab.systemd });
+    env = await provisionContainer(lab.image, lab.given, envName, {
+      systemd:    !!lab.systemd,
+      dockerfile: lab.dockerfile || null,
+    });
   } else if (lab.type === 'virtual-machine') {
     if (os.platform() !== 'linux') {
       throw new Error('VM labs require a Linux host with virt-manager/libvirt.');

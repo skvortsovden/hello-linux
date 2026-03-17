@@ -42,9 +42,18 @@
       <div class="panel-body">
         <h1 class="lab-title">
           <span id="lab-name">Loading…</span>
-          <span id="env-badge" class="badge" style="display:none"></span>
         </h1>
         <div id="lab-description" class="lab-description"></div>
+        <div id="lab-solution-wrap" style="display:none">
+          <button class="btn-reveal" id="solution-toggle" onclick="toggleSolution()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span id="solution-toggle-label">Show Solution</span>
+          </button>
+          <div id="lab-solution" class="lab-description solution-content" style="display:none"></div>
+        </div>
       </div>
 
       <div class="panel-footer">
@@ -109,13 +118,20 @@
       document.title = `${lab.name} — hello-linux`;
       document.getElementById('lab-name').textContent = lab.name;
 
-      const badgeEl = document.getElementById('env-badge');
-      badgeEl.textContent  = lab.type === 'container' ? 'Container' : lab.type === 'virtual-machine' ? 'VM' : lab.type;
-      badgeEl.className    = `badge ${lab.type === 'container' ? 'badge-container' : lab.type === 'virtual-machine' ? 'badge-vm' : 'badge-unknown'}`;
-      badgeEl.style.display = '';
+      const level = (lab.level || '').toLowerCase();
+      if (level) {
+        const levelBadge = document.createElement('span');
+        levelBadge.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+        levelBadge.className   = `badge badge-${level}`;
+        document.getElementById('lab-name').after(levelBadge);
+      }
 
       document.getElementById('lab-description').innerHTML =
         marked.parse(lab.description || '_No description provided._');
+      if (lab.solution) {
+        document.getElementById('lab-solution').innerHTML = marked.parse(lab.solution);
+        document.getElementById('lab-solution-wrap').style.display = '';
+      }
       document.getElementById('terminal-label').textContent = `${lab.image} — bash`;
 
       // 2. Create terminal (hidden until connected)
@@ -298,6 +314,16 @@
       return String(s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function toggleSolution() {
+      const content = document.getElementById('lab-solution');
+      const label   = document.getElementById('solution-toggle-label');
+      const btn     = document.getElementById('solution-toggle');
+      const showing = content.style.display !== 'none';
+      content.style.display = showing ? 'none' : '';
+      label.textContent      = showing ? 'Show Solution' : 'Hide Solution';
+      btn.classList.toggle('active', !showing);
     }
 
     init();

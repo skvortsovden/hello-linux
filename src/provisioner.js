@@ -4,11 +4,13 @@ const { exec }    = require('child_process');
 const { promisify } = require('util');
 const os            = require('os');
 const fs            = require('fs');
+const path          = require('path');
 const { execSync }  = require('child_process');
 
 const execAsync = promisify(exec);
 
-const IS_LINUX = os.platform() === 'linux';
+const IS_LINUX   = os.platform() === 'linux';
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 function resolveBin(name) {
   try {
@@ -26,11 +28,64 @@ const VIRSH_BIN  = resolveBin('virsh');
 console.log(`[provisioner] podman → ${PODMAN_BIN}`);
 
 // ---------------------------------------------------------------------------
+// Image management
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a local image from a Dockerfile if it doesn't already exist.
+ * @param {string} imageName  - local tag, e.g. "hello-linux/systemd-ubuntu:latest"
+ * @param {string} dockerfilePath - path relative to project root
+ */
+async function ensureImage(imageName, dockerfilePath) {
+  // Check if the image already exists locally
+  try {
+    const { stdout } = await execAsync(
+      `"${PODMAN_BIN}" image exists "${imageName}" && echo yes || echo no`
+    );
+    if (stdout.trim() === 'yes') {
+      console.log(`[provisioner] Image "${imageName}" already exists — skipping build`);
+      return;
+    }
+  } catch (_) {}
+
+  const absDockerfile = path.resolve(PROJECT_ROOT, dockerfilePath);
+  if (!fs.existsSync(absDockerfile)) {
+    throw new Error(`Dockerfile not found: ${absDockerfile}`);
+  }
+
+  console.log(`[provisioner] Building image "${imageName}" from ${dockerfilePath} ...`);
+  await execAsync(
+    `"${PODMAN_BIN}" build -t "${imageName}" -f "${absDockerfile}" "${PROJECT_ROOT}"`,
+    { maxBuffer: 10 * 1024 * 1024 }
+  );
+  console.log(`[provisioner] Image "${imageName}" built successfully`);
+}
+
+// ---------------------------------------------------------------------------
 // Container provisioning (Podman, rootless)
 // ---------------------------------------------------------------------------
 
-async function provisionContainer(image, givenCommands, containerName, { systemd = false } = {}) {
+/** Poll until the container reports status "running", or throw after timeout. */
+async function waitUntilRunning(containerName, timeoutMs = 30000, intervalMs = 500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const { stdout } = await execAsync(
+        `"${PODMAN_BIN}" inspect --format '{{.State.Status}}' "${containerName}"`
+      );
+      if (stdout.trim() === 'running') return;
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(`Container "${containerName}" did not reach running state within ${timeoutMs}ms`);
+}
+
+async function provisionContainer(image, givenCommands, containerName, { systemd = false, dockerfile = null } = {}) {
   console.log(`[provisioner] Starting container "${containerName}" (image: ${image})`);
+
+  if (dockerfile) {
+    await ensureImage(image, dockerfile);
+  }
 
   const runCmd = systemd
     ? `"${PODMAN_BIN}" run -d --name "${containerName}" --systemd=always "${image}"`
@@ -39,11 +94,9 @@ async function provisionContainer(image, givenCommands, containerName, { systemd
   await execAsync(runCmd);
   console.log(`[provisioner] Container started: ${containerName}`);
 
-  if (systemd) {
-    // Wait for systemd to finish its startup sequence before running given commands
-    console.log(`[provisioner] Waiting for systemd to initialize in ${containerName}...`);
-    await new Promise(r => setTimeout(r, 3000));
-  }
+  console.log(`[provisioner] Waiting for container "${containerName}" to be running...`);
+  await waitUntilRunning(containerName);
+  console.log(`[provisioner] Container "${containerName}" is running`);
 
   for (const step of (givenCommands || [])) {
     if (!step.command) continue;

@@ -1,9 +1,8 @@
 id: write-to-file
 name: "Write Content to a File"
 description: |
-  ## Objective
   Write the word `hello` into the file `/challenge/hello.txt`.
-
+solution: |
   ## Steps
   1. Create the file with content using `echo` and redirection:
      ```
@@ -14,13 +13,9 @@ description: |
      cat /challenge/hello.txt
      ```
 
-  ## Hints
-  - `>` redirects output and **overwrites** the file.
-  - `>>` appends to an existing file.
-  - `cat` prints the contents of a file to the terminal.
-
+level: junior
 type: container
-image: alpine:latest
+image: ubuntu:24.04
 given:
   - command: "mkdir -p /challenge"
 expected:

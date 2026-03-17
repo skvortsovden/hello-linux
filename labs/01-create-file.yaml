@@ -1,9 +1,8 @@
 id: create-file
 name: "Create Your First File"
 description: |
-  ## Objective
   Create a file named `hello.txt` inside the `/challenge` directory.
-
+solution: |
   ## Steps
   1. Navigate to the challenge directory:
      ```
@@ -18,12 +17,9 @@ description: |
      ls /challenge/
      ```
 
-  ## Hints
-  - The `touch` command creates an empty file if it doesn't already exist.
-  - The full path that will be checked is `/challenge/hello.txt`.
-
+level: junior
 type: container
-image: alpine:latest
+image: ubuntu:24.04
 given:
   - command: "mkdir -p /challenge"
 expected:

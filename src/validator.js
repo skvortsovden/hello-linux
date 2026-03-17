@@ -67,7 +67,9 @@ async function validate(session) {
       }
     } catch (err) {
       passed = false;
-      error  = err.stderr?.trim() || err.message;
+      // Only expose stderr output — never the raw error message, which
+      // contains the full shell command (and therefore the check answer).
+      error  = err.stderr?.trim() || null;
     }
 
     results.push({ description, passed, error: passed ? null : error });

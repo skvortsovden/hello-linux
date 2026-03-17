@@ -142,6 +142,10 @@ a:hover { color: var(--accent-hover); }
 .badge-vm        { background: rgba(251, 191, 36, 0.12);  color: var(--yellow); border: 1px solid rgba(251, 191, 36, 0.25); }
 .badge-unknown   { background: rgba(139, 143, 168, 0.12); color: var(--text-dim); border: 1px solid var(--border); }
 
+.badge-junior  { background: rgba(74, 222, 128, 0.10); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.25); }
+.badge-medior  { background: rgba(217, 164, 65, 0.12);  color: var(--accent); border: 1px solid rgba(217, 164, 65, 0.30); }
+.badge-senior  { background: rgba(201, 122, 64, 0.12);  color: var(--accent-hover); border: 1px solid rgba(201, 122, 64, 0.30); }
+
 .lab-card-desc {
   color: var(--text-dim);
   font-size: 0.875rem;
@@ -358,3 +362,32 @@ a:hover { color: var(--accent-hover); }
   height: 14px;
 }
 @keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ── Solution reveal ─────────────────────────────────────────────────────── */
+.btn-reveal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-top: 16px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  text-align: left;
+}
+.btn-reveal:hover,
+.btn-reveal.active { color: var(--accent); border-color: var(--accent); }
+
+.solution-content {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(217, 164, 65, 0.05);
+  border: 1px solid rgba(217, 164, 65, 0.15);
+  border-radius: var(--radius);
+}
