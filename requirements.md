@@ -1,8 +1,8 @@
 # Requirements: hello-linux
 
 **Document type:** Product Requirements  
-**Version:** 1.0  
-**Date:** 2026-03-16  
+**Version:** 1.1  
+**Date:** 2026-03-17  
 **Status:** Draft
 
 ---
@@ -58,14 +58,14 @@ A technically proficient person (developer, educator, sysadmin) who installs, ru
 ### 4.1 Lab List Page (Home)
 
 - **FR-01** The home page (`/`) displays all available labs loaded from the YAML configuration directory.
-- **FR-02** Each lab card shows: lab name, short description, and environment type badge (`container` or `virtual-machine`).
+- **FR-02** Each lab card shows: lab name, difficulty level badge, and short description. The environment type (container / VM) is not shown to the learner.
 - **FR-03** Clicking a lab card navigates the user to the lab page at `/labs/:id`.
 - **FR-04** The lab list is loaded dynamically from the backend at runtime (no hardcoding in frontend).
 
 ### 4.2 Lab Page
 
 - **FR-05** The lab page uses a two-column layout:
-  - **Left panel (~35% width):** Lab title, full description/instructions, "Check Solution" button, and result feedback area.
+  - **Left panel (~35% width):** Lab title with difficulty level badge, full description/instructions, optional collapsible solution, "Check Solution" button, and result feedback area.
   - **Right panel (~65% width):** Fully interactive terminal.
 - **FR-06** When the lab page loads, the backend provisions a fresh isolated environment for that lab (container or VM).
 - **FR-07** The terminal connects to that environment via WebSocket and provides a real interactive shell (stdin/stdout/stderr streaming).
@@ -87,36 +87,50 @@ A technically proficient person (developer, educator, sysadmin) who installs, ru
 ```yaml
 id: unique-lab-identifier          # string, unique, used in URL
 name: "Lab Display Name"           # string
-description: |                     # multiline markdown string shown in left panel
-  Instructions for the learner...
+level: junior                      # enum: junior | medior | senior — shown as a badge
+description: |                     # multiline markdown: objective + hints only
+  ## Objective
+  Do something useful.
+  ## Hints
+  - A helpful tip.
+solution: |                        # optional multiline markdown: step-by-step solution
+  ## Steps                         # hidden by default, revealed on learner request
+  1. Run this command...
 type: container                    # enum: container | virtual-machine
-image: ubuntu:24.04                # container image (type: container) or cloud-init base image path (type: virtual-machine)
-given:                             # setup steps run before the learner gets a shell
-  - command: "useradd student"
+image: ubuntu:24.04                # container image or cloud-init base image path
+systemd: false                     # optional bool — run container with --systemd=always (PID 1 = systemd)
+given:                             # setup commands run before the learner gets a shell
   - command: "mkdir /challenge"
-expected:                          # validation steps run when "Check Solution" is clicked
-  - description: "File /challenge/hello.txt must exist"
-    check: "test -f /challenge/hello.txt"
-  - description: "File must contain the word 'hello'"
-    check: "grep -q 'hello' /challenge/hello.txt"
+expected:                          # validation checks — exit 0 = pass
+  - description: "File must exist"
+    check: "test -f /challenge/result.txt"
 ```
 
 - **FR-16** The backend watches the `labs/` directory; changes to YAML files are reflected on next page load without restarting the server.
 - **FR-17** All `expected.check` values are shell commands. The check passes if the exit code is `0`.
+- **FR-18** Validation results must never expose the raw `check` shell command to the learner — only the human-readable `description` and any stderr output are shown.
 
 ### 4.5 Environment Provisioning
 
-- **FR-18** For `type: container`, the backend uses Podman to run the specified image in a rootless container.
-- **FR-19** For `type: virtual-machine`, the backend uses **virt-manager / libvirt** (via the `virsh` CLI or `libvirt` API) to define, start, and destroy a VM based on the specified base image. The lab YAML may optionally specify a `disk_image` path or a cloud-init compatible base image. On macOS, a fallback to `podman machine` or QEMU directly is acceptable, but Linux is the primary supported host OS for VM labs.
-- **FR-20** `given` setup commands are executed inside the environment automatically after provisioning and before the terminal is handed to the learner.
-- **FR-21** Each lab session gets its own isolated environment instance (one container/VM per active session).
-- **FR-22** Environments are cleaned up (stopped and removed) when the session ends or times out.
+- **FR-19** For `type: container`, the backend uses Podman to run the specified image in a rootless container.
+- **FR-20** For `type: virtual-machine`, the backend uses **virt-manager / libvirt** (`virsh`) to define, start, and destroy a VM. Linux hosts only.
+- **FR-21** When `systemd: true` is set on a container lab, the container is started with `podman run --systemd=always`, making systemd the PID 1 process. This enables full `systemctl` / `journalctl` functionality inside the container.
+- **FR-22** Before executing `given` commands the provisioner polls `podman inspect` until the container status is `running` (timeout: 30 s, interval: 500 ms), preventing race conditions on slow hosts.
+- **FR-23** `given` setup commands are executed inside the environment automatically after provisioning and before the terminal is handed to the learner.
+- **FR-24** Each lab session gets its own isolated environment instance (one container/VM per active session).
+- **FR-25** Environments are cleaned up (stopped and removed) when the session ends or times out.
 
 ### 4.6 Session Management
 
-- **FR-23** A session is created when a learner opens a lab page and destroyed when they navigate away or close the tab.
-- **FR-24** Sessions have a configurable inactivity timeout (default: 30 minutes) after which the environment is torn down.
-- **FR-25** The backend assigns a unique session ID per lab visit, used to route terminal WebSocket traffic and validation requests to the correct environment.
+- **FR-26** A session is created when a learner opens a lab page and destroyed when they navigate away or close the tab.
+- **FR-27** Sessions have a configurable inactivity timeout (default: 30 minutes) after which the environment is torn down.
+- **FR-28** The backend assigns a unique session ID per lab visit, used to route terminal WebSocket traffic and validation requests to the correct environment.
+
+### 4.7 Solution Reveal
+
+- **FR-29** If a lab YAML includes a `solution` field, a "Show Solution" button is displayed below the instructions in the left panel.
+- **FR-30** The solution content is hidden by default and only revealed when the learner explicitly clicks the button.
+- **FR-31** The button label toggles between "Show Solution" and "Hide Solution" to reflect current state.
 
 ---
 
@@ -208,6 +222,7 @@ Backend (Node.js / Python)
 ```yaml
 id: create-file
 name: "Create Your First File"
+level: junior
 description: |
   ## Objective
   Create a file named `hello.txt` inside the `/challenge` directory.
@@ -215,6 +230,10 @@ description: |
   ## Hints
   - Use the `touch` command to create an empty file.
   - The full path should be `/challenge/hello.txt`.
+solution: |
+  ## Steps
+  1. `cd /challenge`
+  2. `touch hello.txt`
 type: container
 image: ubuntu:24.04
 given:
@@ -224,24 +243,35 @@ expected:
     check: "test -f /challenge/hello.txt"
 ```
 
-### `labs/02-file-permissions.yaml`
+### `labs/04-systemd-service.yaml` (systemd example)
 ```yaml
-id: file-permissions
-name: "Set File Permissions"
+id: systemd-service
+name: "Create a systemd Service"
+level: medior
 description: |
   ## Objective
-  Make the file `/challenge/script.sh` executable by its owner.
+  Write a script that prints `hello linux` every 5 seconds and wrap it in a systemd service.
 
   ## Hints
-  - Use `chmod` to modify file permissions.
-  - The owner execute bit can be set with `chmod u+x`.
+  - `systemctl is-active hello` prints `active` if the service is running.
+  - `systemctl is-enabled hello` prints `enabled` if it starts on boot.
+solution: |
+  ## Steps
+  1. Create `/challenge/hello.sh` with a `while true` loop and `chmod +x` it.
+  2. Write `/etc/systemd/system/hello.service`.
+  3. `systemctl daemon-reload && systemctl start hello && systemctl enable hello`
 type: container
-image: ubuntu:24.04
+image: hello-linux/systemd-ubuntu:latest
+systemd: true
 given:
-  - command: "mkdir -p /challenge && touch /challenge/script.sh"
+  - command: "mkdir -p /challenge"
 expected:
-  - description: "script.sh must be executable by owner"
-    check: "test -x /challenge/script.sh"
+  - description: "/challenge/hello.sh must exist and be executable"
+    check: "test -x /challenge/hello.sh"
+  - description: "hello service must be active"
+    check: "systemctl is-active hello"
+  - description: "hello service must be enabled"
+    check: "systemctl is-enabled hello"
 ```
 
 ---
@@ -287,22 +317,24 @@ expected:
 - Lab scoring or gamification
 - Remote/cloud hosting
 - Lab editor UI (YAML is edited manually)
-- VM support beyond what Podman natively supports on the host OS
+- VM support on macOS (virt-manager / libvirt is Linux-only)
 - Mobile browser support
 
 ---
 
-## 11. Acceptance Criteria
+## 12. Acceptance Criteria
 
 | ID | Criteria |
 |----|----------|
 | AC-01 | Admin can start the platform with one command. |
-| AC-02 | Home page displays all labs from the `labs/` directory. |
-| AC-03 | Clicking a lab opens a page with a live terminal connected to a fresh isolated environment — a Podman container for `type: container` labs, or a libvirt-managed VM (via virt-manager) for `type: virtual-machine` labs. |
-| AC-04 | The left panel shows the lab instructions rendered from the YAML `description` field (Markdown). |
-| AC-05 | Clicking "Check Solution" runs all `expected.check` commands and displays pass/fail. |
-| AC-06 | Adding a new `.yaml` file to `labs/` causes it to appear in the lab list without restarting the server. |
-| AC-07 | Navigating away from a lab tears down the Podman container/VM. |
-| AC-08 | Two concurrent learner sessions for the same lab run in completely separate containers. |
-| AC-09 | All `given` setup commands run successfully before the learner's shell is ready. |
-| AC-10 | The platform requires no host dependency other than Podman (container labs) and optionally virt-manager / libvirt (VM labs on Linux). |
+| AC-02 | Home page displays all labs with name, level badge, and description preview. |
+| AC-03 | Clicking a lab opens a page with a live terminal connected to a fresh isolated environment. |
+| AC-04 | The left panel shows lab instructions rendered from the YAML `description` field (Markdown). |
+| AC-05 | If a `solution` field is present, a hidden "Show Solution" toggle appears below the instructions. |
+| AC-06 | Clicking "Check Solution" runs all `expected.check` commands and displays pass/fail — without revealing the check commands themselves. |
+| AC-07 | Labs with `systemd: true` start a container with systemd as PID 1; `systemctl` and `journalctl` work inside the terminal. |
+| AC-08 | Adding a new `.yaml` file to `labs/` causes it to appear in the lab list without restarting the server. |
+| AC-09 | Navigating away from a lab tears down the Podman container/VM. |
+| AC-10 | Two concurrent learner sessions for the same lab run in completely separate containers. |
+| AC-11 | All `given` setup commands run successfully before the learner's shell is ready. |
+| AC-12 | The platform requires no host dependency other than Podman (container labs) and optionally virt-manager / libvirt (VM labs on Linux). |
