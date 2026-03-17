@@ -1,0 +1,99 @@
+id: socket-activation
+name: "systemd Socket Activation"
+level: senior
+description: |
+  ## Objective
+  Create a **socket-activated** service using systemd. Instead of a service
+  that runs continuously, systemd will listen on TCP port **9000** and only
+  launch your handler when an incoming connection actually arrives. The handler
+  must respond with `hello linux` and then exit.
+
+  This is the same mechanism systemd uses to start services like SSH and DBus
+  on-demand — and it's the foundation that modern container runtimes build on.
+
+  ## How socket activation works
+  Two unit files cooperate:
+  - **`hello.socket`** — tells systemd to own the TCP listener on port 9000.
+  - **`hello@.service`** — a *template* unit instantiated per connection
+    (`Accept=yes`). systemd passes the accepted socket as stdin/stdout.
+
+  Because the `.socket` unit owns the port, it can be enabled at boot and the
+  actual service process is only spawned when a client connects.
+
+  ## Hints
+  - The socket unit must target `sockets.target` in its `[Install]` section.
+  - With `Accept=yes` the service filename must use the template syntax:
+    `hello@.service` (note the `@`).
+  - `StandardInput=socket` and `StandardOutput=socket` wire the accepted
+    connection to the process's stdin/stdout.
+  - `systemctl is-active hello.socket` — check the socket is listening.
+  - `echo "" | nc -w2 localhost 9000` — send a connection and read the reply.
+
+solution: |
+  ### 1. Create the handler script
+  ```
+  cat > /challenge/handler.sh << 'EOF'
+  #!/bin/bash
+  echo "hello linux"
+  EOF
+  chmod +x /challenge/handler.sh
+  ```
+
+  ### 2. Create the socket unit
+  ```
+  cat > /etc/systemd/system/hello.socket << 'EOF'
+  [Unit]
+  Description=Hello Linux Socket
+
+  [Socket]
+  ListenStream=9000
+  Accept=yes
+
+  [Install]
+  WantedBy=sockets.target
+  EOF
+  ```
+
+  ### 3. Create the service template unit
+  ```
+  cat > /etc/systemd/system/hello@.service << 'EOF'
+  [Unit]
+  Description=Hello Linux Handler (instance %i)
+
+  [Service]
+  ExecStart=/challenge/handler.sh
+  StandardInput=socket
+  StandardOutput=socket
+  StandardError=journal
+  EOF
+  ```
+
+  ### 4. Reload, enable and start the socket
+  ```
+  systemctl daemon-reload
+  systemctl enable --now hello.socket
+  ```
+
+  ### 5. Verify
+  ```
+  systemctl is-active hello.socket
+  echo "" | nc -w2 localhost 9000
+  ```
+  You should see `hello linux` printed.
+
+type: container
+image: hello-linux/systemd-ubuntu:latest
+systemd: true
+given:
+  - command: "apt-get install -y --no-install-recommends netcat-openbsd 2>/dev/null; mkdir -p /challenge"
+expected:
+  - description: "/challenge/handler.sh must exist and be executable"
+    check: "test -x /challenge/handler.sh"
+  - description: "/etc/systemd/system/hello.socket must exist"
+    check: "test -f /etc/systemd/system/hello.socket"
+  - description: "/etc/systemd/system/hello@.service template must exist"
+    check: "test -f /etc/systemd/system/hello@.service"
+  - description: "hello.socket must be active (listening)"
+    check: "systemctl is-active hello.socket"
+  - description: "connecting to port 9000 must return 'hello linux'"
+    check: "echo '' | nc -w2 localhost 9000 | grep -q 'hello linux'"
