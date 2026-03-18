@@ -43,20 +43,24 @@ async function createSession(lab) {
   (async () => {
     try {
       let env;
-      if (lab.nodes && lab.nodes.length > 0) {
-        env = await provisionMultiNode(lab.nodes, envName);
-      } else if (lab.type === 'container') {
-        env = await provisionContainer(lab.image, lab.given, envName, {
-          systemd:    !!lab.systemd,
-          dockerfile: lab.dockerfile || null,
-        });
-      } else if (lab.type === 'virtual-machine') {
-        if (os.platform() !== 'linux') {
-          throw new Error('VM labs require a Linux host with virt-manager/libvirt.');
-        }
-        env = await provisionVM(lab.image, lab.given, envName);
+      const nodes = lab.nodes; // always present — all labs use nodes: format
+      if (nodes.length > 1) {
+        env = await provisionMultiNode(nodes, envName);
       } else {
-        throw new Error(`Unknown lab type: "${lab.type}"`);
+        const node = nodes[0];
+        if (node.type === 'container') {
+          env = await provisionContainer(node.image, node.given, envName, {
+            systemd:    !!node.systemd,
+            dockerfile: node.dockerfile || null,
+          });
+        } else if (node.type === 'virtual-machine') {
+          if (os.platform() !== 'linux') {
+            throw new Error('VM labs require a Linux host with virt-manager/libvirt.');
+          }
+          env = await provisionVM(node.image, node.given, envName);
+        } else {
+          throw new Error(`Unknown node type: "${node.type}"`);
+        }
       }
       session.env    = env;
       session.status = 'ready';

@@ -14,10 +14,13 @@ solution: |
      ```
 
 level: user
-type: container
-image: ubuntu:24.04
-given:
-  - command: "mkdir -p /challenge"
+nodes:
+  - name: node
+    type: container
+    image: ubuntu:24.04
+    primary: true
+    given:
+      - command: "mkdir -p /challenge"
 expected:
   - description: "/challenge/hello.txt must exist"
     check: "test -f /challenge/hello.txt"

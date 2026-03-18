@@ -63,10 +63,13 @@ solution: |
   ssh sshuser@<container-ip>
   ```
 
-type: container
-image: ubuntu:24.04
-given:
-  - command: "mkdir -p /challenge"
+nodes:
+  - name: node
+    type: container
+    image: ubuntu:24.04
+    primary: true
+    given:
+      - command: "mkdir -p /challenge"
 expected:
   - description: "openssh-server must be installed"
     check: "dpkg -l openssh-server | grep -q '^ii'"

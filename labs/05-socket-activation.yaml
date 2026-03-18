@@ -61,11 +61,14 @@ solution: |
   ```
   You should see `hello linux` printed.
 
-type: container
-image: hello-linux/systemd-ubuntu:latest
-systemd: true
-given:
-  - command: "apt-get install -y --no-install-recommends netcat-openbsd 2>/dev/null; mkdir -p /challenge"
+nodes:
+  - name: node
+    type: container
+    image: hello-linux/systemd-ubuntu:latest
+    systemd: true
+    primary: true
+    given:
+      - command: "apt-get install -y --no-install-recommends netcat-openbsd 2>/dev/null; mkdir -p /challenge"
 expected:
   - description: "/challenge/handler.sh must exist and be executable"
     check: "test -x /challenge/handler.sh"

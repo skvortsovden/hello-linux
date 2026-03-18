@@ -30,13 +30,16 @@ labLoader.init();
 
 /** GET /api/labs — list all available labs */
 app.get('/api/labs', (_req, res) => {
-  const list = Array.from(labLoader.labs.values()).map(lab => ({
-    id:          lab.id,
-    name:        lab.name,
-    description: lab.description,
-    type:        lab.type,
-    level:       lab.level,
-  }));
+  const list = Array.from(labLoader.labs.values()).map(lab => {
+    const primaryNode = lab.nodes.find(n => n.primary) || lab.nodes[0];
+    return {
+      id:          lab.id,
+      name:        lab.name,
+      description: lab.description,
+      type:        primaryNode.type,
+      level:       lab.level,
+    };
+  });
   res.json(list);
 });
 
@@ -44,16 +47,15 @@ app.get('/api/labs', (_req, res) => {
 app.get('/api/labs/:id', (req, res) => {
   const lab = labLoader.labs.get(req.params.id);
   if (!lab) return res.status(404).json({ error: 'Lab not found' });
+  const primaryNode = lab.nodes.find(n => n.primary) || lab.nodes[0];
   res.json({
     id:          lab.id,
     name:        lab.name,
     description: lab.description,
     solution:    lab.solution,
-    type:        lab.type,
     level:       lab.level,
-    image:       lab.image || (lab.nodes?.find(n => n.primary)?.image) || 'multi-node',
-    multiNode:   !!(lab.nodes && lab.nodes.length > 0),
-    nodes:       lab.nodes ? lab.nodes.map(n => ({ name: n.name, primary: !!n.primary })) : null,
+    image:       primaryNode.image,
+    nodes:       lab.nodes.map(n => ({ name: n.name, primary: !!n.primary })),
   });
 });
 
@@ -65,7 +67,7 @@ app.post('/api/session', async (req, res) => {
   const lab = labLoader.labs.get(labId);
   if (!lab) return res.status(404).json({ error: `Lab "${labId}" not found` });
 
-  if (lab.type === 'virtual-machine' && os.platform() !== 'linux') {
+  if (lab.nodes.some(n => n.type === 'virtual-machine') && os.platform() !== 'linux') {
     return res.status(400).json({
       error: 'VM labs require a Linux host with virt-manager/libvirt installed.',
     });

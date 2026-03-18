@@ -140,10 +140,10 @@
         document.getElementById('lab-solution-wrap').style.display = '';
       }
       // 2. Create terminal(s)
-      if (lab.nodes && lab.nodes.length > 0) {
+      if (lab.nodes.length > 1) {
         initMultiNodeTerminals(lab.nodes);
       } else {
-        document.getElementById('terminal-label').textContent = `${lab.image} — bash`;
+        document.getElementById('terminal-label').textContent = `${lab.nodes[0].name} — bash`;
         initTerminal();
       }
 
