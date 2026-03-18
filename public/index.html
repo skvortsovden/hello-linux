@@ -34,8 +34,9 @@
   </main>
 
   <script>
-    let allLabs    = [];
-    let activeGroup = null;
+    let allLabs     = [];
+    let activeLevel  = null;
+    let activeGroup  = null;
 
     async function loadLabs() {
       const grid = document.getElementById('labs-grid');
@@ -65,27 +66,58 @@
 
     function buildFilters() {
       const bar    = document.getElementById('lab-filter-bar');
+      const levels = [...new Set(allLabs.map(l => l.level).filter(Boolean))]
+        .sort((a, b) => ['user','admin','root'].indexOf(a) - ['user','admin','root'].indexOf(b));
       const groups = [...new Set(allLabs.flatMap(l => l.groups || []))].sort();
-      if (!groups.length) { bar.style.display = 'none'; return; }
 
-      bar.innerHTML = [
-        `<button class="filter-btn active" data-group="">All</button>`,
-        ...groups.map(g => {
-          const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-          return `<button class="filter-btn badge-group badge-${escHtml(slug)}" data-group="${escHtml(g)}">${escHtml(g.toUpperCase())}</button>`;
-        }),
-      ].join('');
+      let html = '';
+
+      // Level row — always shown if any lab has a level
+      if (levels.length) {
+        html += `<div class="filter-row" id="level-filter-row">
+          <span class="filter-label">Level</span>
+          <button class="filter-btn active" data-level="">All</button>
+          ${levels.map(l => `<button class="filter-btn level-${escHtml(l)}" data-level="${escHtml(l)}">${escHtml(l.charAt(0).toUpperCase() + l.slice(1))}</button>`).join('')}
+        </div>`;
+      }
+
+      // Group row — only shown if any lab has groups
+      if (groups.length) {
+        html += `<div class="filter-row" id="group-filter-row">
+          <span class="filter-label">Group</span>
+          <button class="filter-btn active" data-group="">All</button>
+          ${groups.map(g => {
+            const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            return `<button class="filter-btn group-btn badge-${escHtml(slug)}" data-group="${escHtml(g)}">${escHtml(g.toUpperCase())}</button>`;
+          }).join('')}
+        </div>`;
+      }
+
+      bar.innerHTML = html;
 
       bar.addEventListener('click', e => {
         const btn = e.target.closest('.filter-btn');
         if (!btn) return;
-        bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        activeGroup = btn.dataset.group || null;
-        renderCards(activeGroup
-          ? allLabs.filter(l => (l.groups || []).includes(activeGroup))
-          : allLabs);
+
+        if ('level' in btn.dataset) {
+          bar.querySelectorAll('#level-filter-row .filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeLevel = btn.dataset.level || null;
+        } else if ('group' in btn.dataset) {
+          bar.querySelectorAll('#group-filter-row .filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeGroup = btn.dataset.group || null;
+        }
+
+        renderCards(applyFilters());
       });
+    }
+
+    function applyFilters() {
+      return allLabs.filter(l =>
+        (!activeLevel || l.level === activeLevel) &&
+        (!activeGroup || (l.groups || []).includes(activeGroup))
+      );
     }
 
     function renderCards(labs) {

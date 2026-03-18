@@ -165,15 +165,31 @@ a:hover { color: var(--accent-hover); }
   letter-spacing: 0.04em;
 }
 
-/* Group filter bar */
+/* Filter bar */
 .lab-filter-bar {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
   padding: 0 24px 24px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
+}
+
+.filter-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  min-width: 48px;
 }
 
 .filter-btn {
@@ -189,6 +205,10 @@ a:hover { color: var(--accent-hover); }
 }
 .filter-btn:hover  { color: var(--text); border-color: #555; }
 .filter-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(217, 164, 65, 0.08); }
+.filter-btn.active.level-user  { color: #4ade80; border-color: #4ade80; background: rgba(74, 222, 128, 0.08); }
+.filter-btn.active.level-admin { color: var(--accent); border-color: var(--accent); background: rgba(217, 164, 65, 0.08); }
+.filter-btn.active.level-root  { color: var(--accent-hover); border-color: var(--accent-hover); background: rgba(201, 122, 64, 0.08); }
+.filter-btn.active.group-btn   { color: #60a5fa; border-color: #60a5fa; background: rgba(96, 165, 250, 0.08); }
 
 .lab-card-desc {
   color: var(--text-dim);
