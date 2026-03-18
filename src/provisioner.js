@@ -80,16 +80,19 @@ async function waitUntilRunning(containerName, timeoutMs = 30000, intervalMs = 5
   throw new Error(`Container "${containerName}" did not reach running state within ${timeoutMs}ms`);
 }
 
-async function provisionContainer(image, givenCommands, containerName, { systemd = false, dockerfile = null } = {}) {
+async function provisionContainer(image, givenCommands, containerName, { systemd = false, dockerfile = null, privileged = false, sysctls = [] } = {}) {
   console.log(`[provisioner] Starting container "${containerName}" (image: ${image})`);
 
   if (dockerfile) {
     await ensureImage(image, dockerfile);
   }
 
+  const sysctlFlags = sysctls.map(s => `--sysctl "${s}"`).join(' ');
   const runCmd = systemd
     ? `"${PODMAN_BIN}" run -d --name "${containerName}" --systemd=always "${image}"`
-    : `"${PODMAN_BIN}" run -d --name "${containerName}" --security-opt no-new-privileges:true "${image}" sleep 3600`;
+    : privileged
+      ? `"${PODMAN_BIN}" run -d --name "${containerName}" --privileged ${sysctlFlags} "${image}" sleep 3600`.trim()
+      : `"${PODMAN_BIN}" run -d --name "${containerName}" --security-opt no-new-privileges:true ${sysctlFlags} "${image}" sleep 3600`.trim();
 
   await execAsync(runCmd);
   console.log(`[provisioner] Container started: ${containerName}`);
@@ -199,9 +202,12 @@ async function provisionMultiNode(nodes, sessionPrefix) {
       await ensureImage(node.image, node.dockerfile);
     }
 
+    const nodeSysctlFlags = (node.sysctls || []).map(s => `--sysctl "${s}"`).join(' ');
     const runCmd = node.systemd
       ? `"${PODMAN_BIN}" run -d --name "${containerName}" --hostname "${node.name}" --network "${networkName}" --systemd=always "${node.image}"`
-      : `"${PODMAN_BIN}" run -d --name "${containerName}" --hostname "${node.name}" --network "${networkName}" --security-opt no-new-privileges:true "${node.image}" sleep 3600`;
+      : node.privileged
+        ? `"${PODMAN_BIN}" run -d --name "${containerName}" --hostname "${node.name}" --network "${networkName}" --privileged ${nodeSysctlFlags} "${node.image}" sleep 3600`.trim()
+        : `"${PODMAN_BIN}" run -d --name "${containerName}" --hostname "${node.name}" --network "${networkName}" --security-opt no-new-privileges:true ${nodeSysctlFlags} "${node.image}" sleep 3600`.trim();
 
     await execAsync(runCmd);
     console.log(`[provisioner] Started node "${node.name}" → container "${containerName}"`);

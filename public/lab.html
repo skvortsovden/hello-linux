@@ -90,7 +90,7 @@
   </div>
 
   <!-- Matrix rain canvas (pass celebration) -->
-  <canvas id="confetti-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:999;display:none"></canvas>
+  <canvas id="confetti-canvas" style="position:fixed;pointer-events:none;z-index:999;display:none"></canvas>
 
   <script>
     // ── Globals ──────────────────────────────────────────────────────────────
@@ -363,21 +363,40 @@
 
     // ── Matrix Rain ───────────────────────────────────────────────────────────
     function launchMatrixRain() {
+      const panel  = document.querySelector('.lab-panel-right');
       const canvas = document.getElementById('confetti-canvas');
       const ctx    = canvas.getContext('2d');
-      canvas.width  = window.innerWidth;
-      canvas.height = window.innerHeight;
+
+      const rect = panel.getBoundingClientRect();
+      canvas.style.position = 'fixed';
+      canvas.style.left     = rect.left + 'px';
+      canvas.style.top      = rect.top  + 'px';
+      canvas.width  = rect.width;
+      canvas.height = rect.height;
       canvas.style.display = '';
 
-      const CHARS   = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF';
-      const FONT_SZ = 16;
-      const cols    = Math.floor(canvas.width / FONT_SZ);
-      const drops   = Array.from({ length: cols }, () => Math.random() * -50);
+      // Only binary digits — calm and on-theme
+      const CHARS   = '01';
+      const FONT_SZ = 14;
+      const COLS    = Math.floor(canvas.width  / FONT_SZ);
+      const ROWS    = Math.floor(canvas.height / FONT_SZ);
 
-      const DURATION = 4500; // ms total
-      const FADE_AT  = 3000; // ms before end to start fading canvas out
+      // Each column: current row position (starts above viewport at random offset)
+      const drops = Array.from({ length: COLS }, () => -Math.floor(Math.random() * ROWS));
+
+      // Slower, calmer speed — advance only every N frames
+      const TICK_EVERY = 6;
+      let   tick       = 0;
+
+      const DURATION = 5000;
+      const FADE_AT  = 2000;
       const start    = performance.now();
       let   frame;
+
+      // Colour palette: dim body, bright head, occasional gold accent
+      const C_BODY   = '#2a7a45';
+      const C_HEAD   = '#a6e3a1';
+      const C_ACCENT = '#d9a441';
 
       function draw(now) {
         const elapsed = now - start;
@@ -387,37 +406,40 @@
           return;
         }
 
-        // Global alpha fades out in final FADE_AT window
         const fadeProgress = Math.max(0, elapsed - (DURATION - FADE_AT)) / FADE_AT;
         ctx.globalAlpha = 1 - fadeProgress;
 
-        // Trail: semi-transparent black overlay
-        ctx.fillStyle = 'rgba(28,28,28,0.18)';
+        ctx.fillStyle = 'rgba(28,28,28,0.15)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.font      = `bold ${FONT_SZ}px monospace`;
+        ctx.font = `${FONT_SZ}px var(--font-mono, monospace)`;
 
-        for (let i = 0; i < drops.length; i++) {
+        tick++;
+        const advance = (tick % TICK_EVERY === 0);
+
+        for (let i = 0; i < COLS; i++) {
           const char = CHARS[Math.floor(Math.random() * CHARS.length)];
           const x    = i * FONT_SZ;
           const y    = drops[i] * FONT_SZ;
 
-          // Head glyph: bright white
-          ctx.fillStyle = '#e0ffe0';
-          ctx.fillText(char, x, y);
-
-          // Body glyph drawn on next tick (trail handles it via overlay)
-          // Accent: random glyphs get gold highlight
-          if (Math.random() < 0.04) {
-            ctx.fillStyle = '#d9a441';
-            ctx.fillText(char, x, y);
+          if (Math.random() < 0.015) {
+            ctx.fillStyle = C_ACCENT;
+          } else if (drops[i] >= 0 && drops[i] < ROWS) {
+            ctx.fillStyle = C_HEAD;
           } else {
-            ctx.fillStyle = '#00cc44';
-            ctx.fillText(char, x, y + FONT_SZ);
+            ctx.fillStyle = C_BODY;
           }
 
-          if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
-          drops[i] += 0.5;
+          if (y >= 0 && y < canvas.height + FONT_SZ) {
+            ctx.fillText(char, x, y);
+          }
+
+          if (advance) {
+            drops[i]++;
+            if (drops[i] * FONT_SZ > canvas.height + FONT_SZ * 5) {
+              drops[i] = -Math.floor(Math.random() * ROWS * 0.5);
+            }
+          }
         }
 
         frame = requestAnimationFrame(draw);

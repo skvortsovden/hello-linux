@@ -1,0 +1,75 @@
+id: sysctl-persistent
+name: "Make Kernel Parameters Persistent"
+level: admin
+groups: [lfcs]
+domain: operations
+description: |
+  ## Objective
+  Configure a kernel parameter so it **persists across reboots** using a
+  `sysctl.d` drop-in configuration file.
+
+  Your task: make IPv4 packet forwarding (`net.ipv4.ip_forward = 1`) survive a
+  reboot by writing a configuration file and applying it immediately.
+
+  ## Background
+  Runtime `sysctl -w` changes are lost on reboot. To make a parameter permanent,
+  add it to a file in `/etc/sysctl.d/`:
+
+  ```
+  /etc/sysctl.conf          # legacy single file (still works)
+  /etc/sysctl.d/*.conf      # modern drop-in directory (preferred)
+  ```
+
+  The naming convention `99-<topic>.conf` ensures your file loads last and
+  overrides distribution defaults.
+
+  Apply without rebooting:
+
+  ```
+  sysctl --system                         # reload all sysctl.d files
+  sysctl -p /etc/sysctl.d/99-custom.conf  # reload a specific file
+  ```
+
+  ## Hints
+  - Create `/etc/sysctl.d/99-network.conf` containing `net.ipv4.ip_forward = 1`
+  - Apply it immediately with `sysctl --system` or `sysctl -p <file>`
+  - Verify the running value with `sysctl net.ipv4.ip_forward`
+
+solution: |
+  ## Solution
+
+  ### 1. Create the drop-in config file
+  ```
+  echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-network.conf
+  ```
+
+  ### 2. Apply without rebooting
+  ```
+  sysctl --system
+  ```
+  or just reload the specific file:
+  ```
+  sysctl -p /etc/sysctl.d/99-network.conf
+  ```
+
+  ### 3. Verify
+  ```
+  sysctl net.ipv4.ip_forward
+  ```
+  Expected output: `net.ipv4.ip_forward = 1`
+
+nodes:
+  - name: node
+    type: virtual-machine
+    image: /var/lib/hello-linux/images/ubuntu-24.04-arm64.qcow2
+    primary: true
+    given:
+      - command: "sysctl -w net.ipv4.ip_forward=0"
+
+expected:
+  - description: "/etc/sysctl.d/99-network.conf must exist"
+    check: "test -f /etc/sysctl.d/99-network.conf"
+  - description: "config file must reference net.ipv4.ip_forward"
+    check: "grep -q 'net.ipv4.ip_forward' /etc/sysctl.d/99-network.conf"
+  - description: "net.ipv4.ip_forward must currently be set to 1"
+    check: "sysctl -n net.ipv4.ip_forward | grep -qx 1"

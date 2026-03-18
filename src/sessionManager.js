@@ -52,6 +52,8 @@ async function createSession(lab) {
           env = await provisionContainer(node.image, node.given, envName, {
             systemd:    !!node.systemd,
             dockerfile: node.dockerfile || null,
+            privileged: !!node.privileged,
+            sysctls:    node.sysctls || [],
           });
         } else if (node.type === 'virtual-machine') {
           if (os.platform() !== 'linux') {

@@ -1,0 +1,59 @@
+id: sysctl-runtime
+name: "Tune Kernel Parameters at Runtime"
+level: admin
+groups: [lfcs]
+domain: operations
+description: |
+  ## Objective
+  Change a kernel parameter **at runtime** without rebooting, using `sysctl`.
+
+  Runtime changes take effect immediately but are **not persistent** — they are
+  lost when the system reboots.
+
+  Your task: enable IPv4 packet forwarding by setting `net.ipv4.ip_forward` to `1`.
+
+  ## Background
+  The `/proc/sys/` virtual filesystem exposes kernel tunables at runtime.
+  `sysctl` is the standard interface for reading and writing these values:
+
+  ```
+  sysctl net.ipv4.ip_forward        # read current value
+  sysctl -w net.ipv4.ip_forward=1   # write new value (runtime only)
+  ```
+
+  You can also write directly to the proc file:
+
+  ```
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+  ```
+
+  ## Hints
+  - Use `sysctl -a` to list all available parameters
+  - Dot notation maps to directory paths under `/proc/sys/` (dots → `/`)
+  - The change applies immediately but will **not** survive a reboot
+
+solution: |
+  ## Solution
+
+  ### Set the parameter at runtime
+  ```
+  sysctl -w net.ipv4.ip_forward=1
+  ```
+
+  ### Verify
+  ```
+  sysctl net.ipv4.ip_forward
+  ```
+  Expected output: `net.ipv4.ip_forward = 1`
+
+nodes:
+  - name: node
+    type: virtual-machine
+    image: /var/lib/hello-linux/images/ubuntu-24.04-arm64.qcow2
+    primary: true
+    given:
+      - command: "sysctl -w net.ipv4.ip_forward=0"
+
+expected:
+  - description: "net.ipv4.ip_forward must be set to 1"
+    check: "sysctl -n net.ipv4.ip_forward | grep -qx 1"
