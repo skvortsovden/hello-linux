@@ -12,20 +12,10 @@ const execAsync = promisify(exec);
 const IS_LINUX   = os.platform() === 'linux';
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
-function resolveBin(name) {
-  try {
-    return execSync(`which ${name}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch (_) {}
-  for (const prefix of ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']) {
-    const p = `${prefix}/${name}`;
-    try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (_) {}
-  }
-  return name;
-}
+const { CONTAINER_BIN, VIRSH_BIN } = require('./containerBin');
 
-const PODMAN_BIN = resolveBin('podman');
-const VIRSH_BIN  = resolveBin('virsh');
-console.log(`[provisioner] podman → ${PODMAN_BIN}`);
+// Keep PODMAN_BIN as an alias so existing code below needs no changes
+const PODMAN_BIN = CONTAINER_BIN;
 
 // ---------------------------------------------------------------------------
 // Image management
@@ -37,15 +27,11 @@ console.log(`[provisioner] podman → ${PODMAN_BIN}`);
  * @param {string} dockerfilePath - path relative to project root
  */
 async function ensureImage(imageName, dockerfilePath) {
-  // Check if the image already exists locally
+  // Check if the image already exists locally (works with both podman and docker)
   try {
-    const { stdout } = await execAsync(
-      `"${PODMAN_BIN}" image exists "${imageName}" && echo yes || echo no`
-    );
-    if (stdout.trim() === 'yes') {
-      console.log(`[provisioner] Image "${imageName}" already exists — skipping build`);
-      return;
-    }
+    await execAsync(`"${PODMAN_BIN}" image inspect "${imageName}"`);
+    console.log(`[provisioner] Image "${imageName}" already exists — skipping build`);
+    return;
   } catch (_) {}
 
   const absDockerfile = path.resolve(PROJECT_ROOT, dockerfilePath);

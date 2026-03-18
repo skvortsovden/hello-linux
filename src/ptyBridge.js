@@ -1,25 +1,11 @@
 'use strict';
 
 const pty              = require('node-pty');
-const fs               = require('fs');
-const { execSync }     = require('child_process');
 const { resetTimeout } = require('./sessionManager');
+const { CONTAINER_BIN, VIRSH_BIN } = require('./containerBin');
 
-/** Resolve the absolute path of a CLI tool, checking $PATH then common prefix dirs. */
-function resolveBin(name) {
-  try {
-    return execSync(`which ${name}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch (_) {}
-  for (const prefix of ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']) {
-    const p = `${prefix}/${name}`;
-    try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (_) {}
-  }
-  return name; // last resort — let the OS try
-}
-
-const PODMAN_BIN = resolveBin('podman');
-const VIRSH_BIN  = resolveBin('virsh');
-console.log(`[ptyBridge] podman → ${PODMAN_BIN}`);
+const PODMAN_BIN = CONTAINER_BIN;
+console.log(`[ptyBridge] container tool → ${PODMAN_BIN}`);
 
 /**
  * Attach a node-pty process to a WebSocket for a given session.

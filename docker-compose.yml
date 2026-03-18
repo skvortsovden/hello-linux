@@ -1,0 +1,13 @@
+services:
+  hello-linux:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Give the app access to the host's Docker daemon
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Hot-reload labs without rebuilding the image
+      - ./labs:/app/labs:ro
+    environment:
+      - SESSION_TIMEOUT_MINUTES=30
+    restart: unless-stopped

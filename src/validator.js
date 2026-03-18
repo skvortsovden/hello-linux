@@ -2,24 +2,11 @@
 
 const { exec }      = require('child_process');
 const { promisify } = require('util');
-const fs            = require('fs');
-const { execSync }  = require('child_process');
+const { CONTAINER_BIN, VIRSH_BIN } = require('./containerBin');
 
 const execAsync = promisify(exec);
 
-function resolveBin(name) {
-  try {
-    return execSync(`which ${name}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch (_) {}
-  for (const prefix of ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']) {
-    const p = `${prefix}/${name}`;
-    try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (_) {}
-  }
-  return name;
-}
-
-const PODMAN_BIN = resolveBin('podman');
-const VIRSH_BIN  = resolveBin('virsh');
+const PODMAN_BIN = CONTAINER_BIN;
 
 /**
  * Run all `expected` checks for a session's lab inside its environment.
