@@ -142,6 +142,13 @@
         lastBadgeAnchor.after(b);
         lastBadgeAnchor = b;
       }
+      if (lab.domain) {
+        const b = document.createElement('span');
+        b.textContent = lab.domain;
+        b.className   = 'badge badge-domain';
+        lastBadgeAnchor.after(b);
+        lastBadgeAnchor = b;
+      }
 
       document.getElementById('lab-description').innerHTML =
         marked.parse(lab.description || '_No description provided._');

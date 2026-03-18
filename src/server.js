@@ -39,6 +39,7 @@ app.get('/api/labs', (_req, res) => {
       type:        primaryNode.type,
       level:       lab.level,
       groups:      lab.groups || [],
+      domain:      lab.domain || null,
     };
   });
   res.json(list);
@@ -56,6 +57,7 @@ app.get('/api/labs/:id', (req, res) => {
     solution:    lab.solution,
     level:       lab.level,
     groups:      lab.groups || [],
+    domain:      lab.domain || null,
     image:       primaryNode.image,
     nodes:       lab.nodes.map(n => ({ name: n.name, primary: !!n.primary })),
   });

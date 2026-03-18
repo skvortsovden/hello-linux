@@ -2,6 +2,7 @@ id: hello-script
 name: "Create Your First Script"
 level: user
 groups: [basics]
+domain: essential-commands
 description: |
   Write a shell script at `/challenge/hello.sh` that prints `hello linux`
   every 5 seconds in an infinite loop, then make it executable and run it.

@@ -37,6 +37,7 @@
     let allLabs     = [];
     let activeLevel  = null;
     let activeGroup  = null;
+    let activeDomain = null;
 
     async function loadLabs() {
       const grid = document.getElementById('labs-grid');
@@ -66,9 +67,10 @@
 
     function buildFilters() {
       const bar    = document.getElementById('lab-filter-bar');
-      const levels = [...new Set(allLabs.map(l => l.level).filter(Boolean))]
+      const levels  = [...new Set(allLabs.map(l => l.level).filter(Boolean))]
         .sort((a, b) => ['user','admin','root'].indexOf(a) - ['user','admin','root'].indexOf(b));
-      const groups = [...new Set(allLabs.flatMap(l => l.groups || []))].sort();
+      const groups  = [...new Set(allLabs.flatMap(l => l.groups || []))].sort();
+      const domains = [...new Set(allLabs.map(l => l.domain).filter(Boolean))].sort();
 
       let html = '';
 
@@ -93,6 +95,18 @@
         </div>`;
       }
 
+      // Domain row — only shown if any lab has a domain
+      if (domains.length) {
+        html += `<div class="filter-row" id="domain-filter-row">
+          <span class="filter-label">Domain</span>
+          <button class="filter-btn active" data-domain="">All</button>
+          ${domains.map(d => {
+            const label = d.replace(/-/g, '\u00a0').replace(/\b\w/g, c => c.toUpperCase());
+            return `<button class="filter-btn domain-btn" data-domain="${escHtml(d)}">${escHtml(label)}</button>`;
+          }).join('')}
+        </div>`;
+      }
+
       bar.innerHTML = html;
 
       bar.addEventListener('click', e => {
@@ -107,6 +121,10 @@
           bar.querySelectorAll('#group-filter-row .filter-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           activeGroup = btn.dataset.group || null;
+        } else if ('domain' in btn.dataset) {
+          bar.querySelectorAll('#domain-filter-row .filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeDomain = btn.dataset.domain || null;
         }
 
         renderCards(applyFilters());
@@ -115,8 +133,9 @@
 
     function applyFilters() {
       return allLabs.filter(l =>
-        (!activeLevel || l.level === activeLevel) &&
-        (!activeGroup || (l.groups || []).includes(activeGroup))
+        (!activeLevel  || l.level === activeLevel) &&
+        (!activeGroup  || (l.groups || []).includes(activeGroup)) &&
+        (!activeDomain || l.domain === activeDomain)
       );
     }
 
@@ -144,6 +163,9 @@
           const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-');
           return `<span class="badge badge-group badge-${escHtml(slug)}">${escHtml(g.toUpperCase())}</span>`;
         }).join('');
+        const domainBadge = lab.domain
+          ? `<span class="badge badge-domain">${escHtml(lab.domain)}</span>`
+          : '';
 
         // Strip markdown for preview
         const plainDesc = (lab.description || '')
@@ -159,6 +181,7 @@
               <div class="badge-row">
                 ${levelLabel ? `<span class="badge ${levelClass}">${escHtml(levelLabel)}</span>` : ''}
                 ${groupBadges}
+                ${domainBadge}
               </div>
             </div>
             <p class="lab-card-desc">${escHtml(plainDesc)}</p>

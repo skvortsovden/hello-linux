@@ -2,6 +2,7 @@ id: ssh-server
 name: "Set Up an SSH Server"
 level: admin
 groups: [lfcs, ssh]
+domain: networking
 description: |
   ## Objective
   Install and configure an OpenSSH server so that a remote host can connect
