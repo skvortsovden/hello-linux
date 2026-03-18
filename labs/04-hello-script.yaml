@@ -1,6 +1,6 @@
 id: hello-script
 name: "Create Your First Script"
-level: junior
+level: user
 description: |
   Write a shell script at `/challenge/hello.sh` that prints `hello linux`
   every 5 seconds in an infinite loop, then make it executable and run it.

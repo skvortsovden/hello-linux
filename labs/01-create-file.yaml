@@ -13,7 +13,7 @@ solution: |
      ls /challenge/
      ```
 
-level: junior
+level: user
 type: container
 image: ubuntu:24.04
 given:

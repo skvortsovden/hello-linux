@@ -51,7 +51,7 @@ solution: |
   systemctl enable hello
   ```
 
-level: medior
+level: admin
 type: container
 image: hello-linux/systemd-ubuntu:latest
 systemd: true

@@ -1,6 +1,6 @@
 id: ssh-server
 name: "Set Up an SSH Server"
-level: medior
+level: admin
 description: |
   ## Objective
   Install and configure an OpenSSH server so that a remote host can connect

@@ -5,6 +5,7 @@ const os = require('os');
 const {
   provisionContainer, destroyContainer,
   provisionVM,        destroyVM,
+  provisionMultiNode, destroyMultiNode,
 } = require('./provisioner');
 
 const INACTIVITY_TIMEOUT_MS = (process.env.SESSION_TIMEOUT_MINUTES || 30) * 60 * 1000;
@@ -22,36 +23,51 @@ async function createSession(lab) {
 
   console.log(`[sessionManager] Creating session ${sessionId} for lab "${lab.id}"`);
 
-  let env;
-  if (lab.type === 'container') {
-    env = await provisionContainer(lab.image, lab.given, envName, {
-      systemd:    !!lab.systemd,
-      dockerfile: lab.dockerfile || null,
-    });
-  } else if (lab.type === 'virtual-machine') {
-    if (os.platform() !== 'linux') {
-      throw new Error('VM labs require a Linux host with virt-manager/libvirt.');
-    }
-    env = await provisionVM(lab.image, lab.given, envName);
-  } else {
-    throw new Error(`Unknown lab type: "${lab.type}"`);
-  }
-
   const session = {
     sessionId,
     labId:     lab.id,
     lab,
-    env,
+    env:       null,
+    status:    'pending',   // 'pending' | 'ready' | 'error'
+    statusMsg: 'Provisioning…',
     createdAt: Date.now(),
-    ws:        null,   // active WebSocket (set by ptyBridge)
-    pty:       null,   // active node-pty process (set by ptyBridge)
+    ws:        null,
+    pty:       null,
     _timeout:  null,
   };
 
   sessions.set(sessionId, session);
   resetTimeout(session);
 
-  console.log(`[sessionManager] Session ${sessionId} ready`);
+  // Provision in background — caller gets sessionId immediately
+  (async () => {
+    try {
+      let env;
+      if (lab.nodes && lab.nodes.length > 0) {
+        env = await provisionMultiNode(lab.nodes, envName);
+      } else if (lab.type === 'container') {
+        env = await provisionContainer(lab.image, lab.given, envName, {
+          systemd:    !!lab.systemd,
+          dockerfile: lab.dockerfile || null,
+        });
+      } else if (lab.type === 'virtual-machine') {
+        if (os.platform() !== 'linux') {
+          throw new Error('VM labs require a Linux host with virt-manager/libvirt.');
+        }
+        env = await provisionVM(lab.image, lab.given, envName);
+      } else {
+        throw new Error(`Unknown lab type: "${lab.type}"`);
+      }
+      session.env    = env;
+      session.status = 'ready';
+      console.log(`[sessionManager] Session ${sessionId} ready`);
+    } catch (err) {
+      session.status    = 'error';
+      session.statusMsg = err.message;
+      console.error(`[sessionManager] Session ${sessionId} provisioning failed: ${err.message}`);
+    }
+  })();
+
   return session;
 }
 
@@ -79,6 +95,8 @@ async function destroySession(sessionId) {
   try {
     if (session.env.type === 'container') {
       await destroyContainer(session.env.containerId);
+    } else if (session.env.type === 'multi') {
+      await destroyMultiNode(session.env);
     } else if (session.env.type === 'vm') {
       await destroyVM(session.env.vmName, session.env.diskPath);
     }

@@ -89,7 +89,7 @@ async function provisionContainer(image, givenCommands, containerName, { systemd
 
   const runCmd = systemd
     ? `"${PODMAN_BIN}" run -d --name "${containerName}" --systemd=always "${image}"`
-    : `"${PODMAN_BIN}" run -d --name "${containerName}" --security-opt no-new-privileges:true "${image}" sleep infinity`;
+    : `"${PODMAN_BIN}" run -d --name "${containerName}" --security-opt no-new-privileges:true "${image}" sleep 3600`;
 
   await execAsync(runCmd);
   console.log(`[provisioner] Container started: ${containerName}`);
@@ -171,4 +171,92 @@ async function destroyVM(vmName, diskPath) {
   console.log(`[provisioner] VM destroyed: ${vmName}`);
 }
 
-module.exports = { provisionContainer, destroyContainer, provisionVM, destroyVM, IS_LINUX };
+// ---------------------------------------------------------------------------
+// Multi-node provisioning (shared Podman network)
+// ---------------------------------------------------------------------------
+
+/**
+ * Provision multiple containers on a dedicated Podman network.
+ * @param {Array}  nodes         - array of node definitions from lab YAML
+ * @param {string} sessionPrefix - unique prefix for container/network names
+ * @returns {{ type: 'multi', network: string, nodes: Array }}
+ */
+async function provisionMultiNode(nodes, sessionPrefix) {
+  const networkName = `${sessionPrefix}-net`;
+
+  // Create a dedicated network so nodes can resolve each other by hostname
+  await execAsync(`"${PODMAN_BIN}" network create "${networkName}"`);
+  console.log(`[provisioner] Network created: ${networkName}`);
+
+  const containerNames = [];
+
+  // 1. Start all containers (non-blocking — we wait below)
+  for (const node of nodes) {
+    const containerName = `${sessionPrefix}-${node.name}`;
+    containerNames.push(containerName);
+
+    if (node.dockerfile) {
+      await ensureImage(node.image, node.dockerfile);
+    }
+
+    const runCmd = node.systemd
+      ? `"${PODMAN_BIN}" run -d --name "${containerName}" --hostname "${node.name}" --network "${networkName}" --systemd=always "${node.image}"`
+      : `"${PODMAN_BIN}" run -d --name "${containerName}" --hostname "${node.name}" --network "${networkName}" --security-opt no-new-privileges:true "${node.image}" sleep 3600`;
+
+    await execAsync(runCmd);
+    console.log(`[provisioner] Started node "${node.name}" → container "${containerName}"`);
+  }
+
+  // 2. Wait for all containers to reach 'running' in parallel
+  await Promise.all(containerNames.map(name => waitUntilRunning(name)));
+  console.log(`[provisioner] All nodes running`);
+
+  // 3. Run given commands on each node sequentially (order may matter)
+  const provisionedNodes = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node          = nodes[i];
+    const containerName = containerNames[i];
+
+    for (const step of (node.given || [])) {
+      if (!step.command) continue;
+      console.log(`[provisioner]   given [${node.name}]: ${step.command}`);
+      await execAsync(
+        `"${PODMAN_BIN}" exec "${containerName}" sh -c ${JSON.stringify(step.command)}`,
+        { maxBuffer: 10 * 1024 * 1024 }
+      );
+    }
+
+    provisionedNodes.push({
+      name:        node.name,
+      containerId: containerName,
+      primary:     !!node.primary,
+    });
+  }
+
+  const primaryNode = provisionedNodes.find(n => n.primary);
+  if (!primaryNode) throw new Error('Multi-node lab must have exactly one node with primary: true');
+
+  console.log(`[provisioner] Multi-node ready — network: ${networkName}, primary: ${primaryNode.name}`);
+  return { type: 'multi', network: networkName, nodes: provisionedNodes };
+}
+
+/**
+ * Destroy all containers in a multi-node environment and remove the shared network.
+ * @param {{ network: string, nodes: Array }} env
+ */
+async function destroyMultiNode(env) {
+  console.log(`[provisioner] Destroying multi-node environment (network: ${env.network})`);
+
+  // Stop + remove all nodes in parallel
+  await Promise.allSettled(env.nodes.map(async node => {
+    try { await execAsync(`"${PODMAN_BIN}" stop "${node.containerId}"`); } catch (_) {}
+    try { await execAsync(`"${PODMAN_BIN}" rm -f "${node.containerId}"`); } catch (_) {}
+    console.log(`[provisioner] Node "${node.name}" destroyed`);
+  }));
+
+  // Remove the shared network
+  try { await execAsync(`"${PODMAN_BIN}" network rm -f "${env.network}"`); } catch (_) {}
+  console.log(`[provisioner] Network ${env.network} removed`);
+}
+
+module.exports = { provisionContainer, destroyContainer, provisionVM, destroyVM, provisionMultiNode, destroyMultiNode, IS_LINUX };

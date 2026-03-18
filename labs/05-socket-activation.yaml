@@ -1,6 +1,6 @@
 id: socket-activation
 name: "systemd Socket Activation"
-level: senior
+level: root
 description: |
   Create a **socket-activated** service using systemd. Instead of a service
   that runs continuously, systemd will listen on TCP port **9000** and only

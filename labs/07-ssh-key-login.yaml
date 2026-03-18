@@ -1,0 +1,110 @@
+id: ssh-key-login
+name: "SSH Key-Based Login Between Two Hosts"
+level: admin
+description: |
+  ## Objective
+  Set up passwordless SSH login from **client** to **server** using an
+  ED25519 key pair.
+
+  You have two hosts in a shared network:
+  | Host | Role |
+  |------|------|
+  | `server` | Runs `sshd`, accepts incoming SSH connections |
+  | `client` | Initiates SSH connections to `server` |
+
+  Your terminal is connected to **server**. Both hostnames are
+  DNS-resolvable from either container.
+
+  Complete all three tasks:
+  1. Generate an ED25519 key pair on **client**
+  2. Authorise the public key on **server**
+  3. Confirm that **client** can `ssh server` without a password
+
+  ## Background
+  Key-based authentication replaces the password handshake with a
+  cryptographic challenge/response:
+  - The **private key** stays on the client (`~/.ssh/id_ed25519`)
+  - The **public key** is placed in `~/.ssh/authorized_keys` on the server
+  - `sshd` only lets you in if your private key matches a listed public key
+
+  ## Hints
+  - Generate a key pair (no passphrase): `ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519`
+  - Copy the public key to the server:
+    - Manual: `cat ~/.ssh/id_ed25519.pub` on client, then append to
+      `/root/.ssh/authorized_keys` on server
+    - Automatic: `ssh-copy-id -i ~/.ssh/id_ed25519.pub root@server`
+      (requires a password login to be set up first)
+  - Test the connection: `ssh -o StrictHostKeyChecking=no root@server 'echo ok'`
+  - You can switch between containers using `podman exec` from the host,
+    or just work entirely from the **server** terminal and use
+    `podman exec <client-container>` commands — but the simplest approach
+    is to generate the key on **client** and authorise it on **server**.
+
+  > **Tip:** The easiest workflow is:
+  > 1. On client: generate the key pair
+  > 2. On client: print the public key with `cat ~/.ssh/id_ed25519.pub`
+  > 3. On server (your terminal): paste the key into `/root/.ssh/authorized_keys`
+  > 4. On client: test with `ssh -o StrictHostKeyChecking=no root@server 'echo ok'`
+
+solution: |
+  ## Steps
+
+  ### 1. Generate key pair on client
+  Run inside the client container (from your server terminal you can use
+  `podman exec` — but if you prefer, open a second terminal and connect to
+  the client directly):
+  ```
+  ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_ed25519
+  ```
+
+  ### 2. Authorise the public key on server
+  Option A — copy manually:
+  ```bash
+  # On client: print public key
+  cat /root/.ssh/id_ed25519.pub
+
+  # On server: append it to authorized_keys
+  mkdir -p /root/.ssh && chmod 700 /root/.ssh
+  echo "<paste-public-key-here>" >> /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+  ```
+
+  Option B — use ssh-copy-id (client already has the password `root`):
+  ```bash
+  ssh-copy-id -i /root/.ssh/id_ed25519.pub root@server
+  ```
+
+  ### 3. Test passwordless login from client
+  ```bash
+  ssh -o StrictHostKeyChecking=no root@server 'echo ok'
+  ```
+  You should see `ok` printed without being asked for a password.
+
+nodes:
+  - name: server
+    type: container
+    image: ubuntu:24.04
+    primary: true
+    given:
+      - command: "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server -qq"
+      - command: "mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh"
+      - command: "/usr/sbin/sshd"
+
+  - name: client
+    type: container
+    image: ubuntu:24.04
+    given:
+      - command: "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-client -qq"
+      - command: "mkdir -p /root/.ssh && chmod 700 /root/.ssh"
+      - command: "ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_ed25519"
+
+expected:
+  - description: "sshd is running on server"
+    check: "pgrep -x sshd"
+
+  - description: "/root/.ssh/authorized_keys exists on server"
+    check: "test -f /root/.ssh/authorized_keys"
+
+  - description: "client can SSH into server without a password"
+    node: client
+    check: "ssh -o StrictHostKeyChecking=no -o BatchMode=yes root@server 'echo ok'"

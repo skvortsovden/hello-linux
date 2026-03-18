@@ -51,11 +51,13 @@ app.get('/api/labs/:id', (req, res) => {
     solution:    lab.solution,
     type:        lab.type,
     level:       lab.level,
-    image:       lab.image,
+    image:       lab.image || (lab.nodes?.find(n => n.primary)?.image) || 'multi-node',
+    multiNode:   !!(lab.nodes && lab.nodes.length > 0),
+    nodes:       lab.nodes ? lab.nodes.map(n => ({ name: n.name, primary: !!n.primary })) : null,
   });
 });
 
-/** POST /api/session — provision a new lab environment and return sessionId */
+/** POST /api/session — create session (provisioning runs in background) */
 app.post('/api/session', async (req, res) => {
   const { labId } = req.body;
   if (!labId) return res.status(400).json({ error: '"labId" is required' });
@@ -71,11 +73,19 @@ app.post('/api/session', async (req, res) => {
 
   try {
     const session = await createSession(lab);
+    // Return immediately — provisioning continues in background
     res.json({ sessionId: session.sessionId });
   } catch (err) {
     console.error('[server] Session creation failed:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+/** GET /api/session/:sessionId/status — poll provisioning state */
+app.get('/api/session/:sessionId/status', (req, res) => {
+  const session = getSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  res.json({ status: session.status, message: session.statusMsg || '' });
 });
 
 /** DELETE /api/session/:sessionId — tear down session */
@@ -130,8 +140,9 @@ server.on('upgrade', (req, socket, head) => {
   }
 
   const sessionId = match[1];
-  const cols = parseInt(url.searchParams.get('cols')) || 80;
-  const rows = parseInt(url.searchParams.get('rows')) || 24;
+  const cols     = parseInt(url.searchParams.get('cols')) || 80;
+  const rows     = parseInt(url.searchParams.get('rows')) || 24;
+  const nodeName = url.searchParams.get('node') || null;
 
   wss.handleUpgrade(req, socket, head, ws => {
     const session = getSession(sessionId);
@@ -139,9 +150,13 @@ server.on('upgrade', (req, socket, head) => {
       ws.close(1008, 'Session not found');
       return;
     }
+    if (session.status !== 'ready') {
+      ws.close(1013, 'Session not ready yet');
+      return;
+    }
     session.ws = ws;
-    console.log(`[server] WebSocket connected for session ${sessionId}`);
-    attachPty(session, ws, cols, rows);
+    console.log(`[server] WebSocket connected for session ${sessionId}${nodeName ? ` (node: ${nodeName})` : ''}`);
+    attachPty(session, ws, cols, rows, nodeName);
   });
 });
 

@@ -29,7 +29,7 @@ console.log(`[ptyBridge] podman → ${PODMAN_BIN}`);
  *   Client → Server: { type: 'input',  data: '<string>' }
  *                    { type: 'resize', cols: <n>, rows: <n> }
  */
-function attachPty(session, ws, cols = 80, rows = 24) {
+function attachPty(session, ws, cols = 80, rows = 24, nodeName = null) {
   const { env } = session;
 
   let ptyProcess;
@@ -38,6 +38,25 @@ function attachPty(session, ws, cols = 80, rows = 24) {
     ptyProcess = pty.spawn(
       '/bin/sh',
       ['-c', `exec "${PODMAN_BIN}" exec -it "${env.containerId}" /bin/bash`],
+      {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd:  process.env.HOME || '/',
+        env:  { ...process.env, TERM: 'xterm-256color' },
+      }
+    );
+  } else if (env.type === 'multi') {
+    const targetNode = nodeName
+      ? env.nodes.find(n => n.name === nodeName)
+      : env.nodes.find(n => n.primary);
+    if (!targetNode) {
+      ws.send(JSON.stringify({ type: 'data', data: `\r\nError: node "${nodeName}" not found in this session\r\n` }));
+      return;
+    }
+    ptyProcess = pty.spawn(
+      '/bin/sh',
+      ['-c', `exec "${PODMAN_BIN}" exec -it "${targetNode.containerId}" /bin/bash`],
       {
         name: 'xterm-256color',
         cols,

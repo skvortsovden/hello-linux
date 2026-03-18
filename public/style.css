@@ -142,9 +142,9 @@ a:hover { color: var(--accent-hover); }
 .badge-vm        { background: rgba(251, 191, 36, 0.12);  color: var(--yellow); border: 1px solid rgba(251, 191, 36, 0.25); }
 .badge-unknown   { background: rgba(139, 143, 168, 0.12); color: var(--text-dim); border: 1px solid var(--border); }
 
-.badge-junior  { background: rgba(74, 222, 128, 0.10); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.25); }
-.badge-medior  { background: rgba(217, 164, 65, 0.12);  color: var(--accent); border: 1px solid rgba(217, 164, 65, 0.30); }
-.badge-senior  { background: rgba(201, 122, 64, 0.12);  color: var(--accent-hover); border: 1px solid rgba(201, 122, 64, 0.30); }
+.badge-user    { background: rgba(74, 222, 128, 0.10); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.25); }
+.badge-admin   { background: rgba(217, 164, 65, 0.12);  color: var(--accent); border: 1px solid rgba(217, 164, 65, 0.30); }
+.badge-root    { background: rgba(201, 122, 64, 0.12);  color: var(--accent-hover); border: 1px solid rgba(201, 122, 64, 0.30); }
 
 .lab-card-desc {
   color: var(--text-dim);
@@ -318,6 +318,7 @@ a:hover { color: var(--accent-hover); }
   flex: 1;
   overflow: hidden;
   padding: 8px;
+  position: relative; /* anchor for .terminal-pane absolute children */
 }
 
 /* Status overlay */
@@ -390,4 +391,42 @@ a:hover { color: var(--accent-hover); }
   background: rgba(217, 164, 65, 0.05);
   border: 1px solid rgba(217, 164, 65, 0.15);
   border-radius: var(--radius);
+}
+
+/* ── Multi-node tab bar ──────────────────────────────────────────────────── */
+.terminal-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-left: 8px;
+  height: 100%;
+}
+
+.terminal-tab {
+  padding: 0 14px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: #6c6c6c;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.terminal-tab:hover  { color: var(--text-dim); }
+.terminal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Overlay panes inside #terminal-container (multi-node) */
+.terminal-pane {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+.terminal-pane.active {
+  visibility: visible;
 }

@@ -1,8 +1,8 @@
 # Requirements: hello-linux
 
 **Document type:** Product Requirements  
-**Version:** 1.1  
-**Date:** 2026-03-17  
+**Version:** 1.3  
+**Date:** 2026-03-18  
 **Status:** Draft
 
 ---
@@ -50,6 +50,7 @@ A technically proficient person (developer, educator, sysadmin) who installs, ru
 | A-04b | As an admin, I want virt-manager / libvirt to be used on Linux to provision virtual machine environments so I get full OS-level isolation when a lab requires it. |
 | A-05 | As an admin, I want lab environments to be automatically started when a learner opens a lab and stopped when they leave so resources are not wasted. |
 | A-06 | As an admin, I want to define the initial state ("given") and the success criteria ("expected") for each lab in the YAML file so validation is declarative and version-controlled. |
+| A-07 | As an admin, I want to define a lab with multiple containers or VMs in a shared network so I can create realistic multi-host scenarios (e.g. SSH between two machines, client-server setups). |
 
 ---
 
@@ -82,12 +83,13 @@ A technically proficient person (developer, educator, sysadmin) who installs, ru
 ### 4.4 Lab Configuration (YAML)
 
 - **FR-14** Each lab is described in its own `.yaml` file stored in a designated `labs/` directory on the host.
-- **FR-15** The YAML schema must include the following fields:
+- **FR-15** The YAML schema must support two layouts: **single-node** (backwards-compatible) and **multi-node**.
 
+**Single-node layout** (existing):
 ```yaml
 id: unique-lab-identifier          # string, unique, used in URL
 name: "Lab Display Name"           # string
-level: junior                      # enum: junior | medior | senior — shown as a badge
+level: user                        # enum: user | admin | root — shown as a badge
 description: |                     # multiline markdown: objective + hints only
   ## Objective
   Do something useful.
@@ -105,6 +107,42 @@ expected:                          # validation checks — exit 0 = pass
   - description: "File must exist"
     check: "test -f /challenge/result.txt"
 ```
+
+**Multi-node layout** (new — use when a lab requires more than one host):
+```yaml
+id: unique-lab-identifier
+name: "Lab Display Name"
+level: admin
+description: |
+  ## Objective
+  Configure SSH key-based login between two hosts.
+solution: |                        # optional
+  ## Steps
+  1. ...
+nodes:
+  - name: server                   # DNS hostname inside the shared lab network
+    type: container                # enum: container | virtual-machine
+    image: ubuntu:24.04
+    systemd: false                 # optional
+    primary: true                  # the terminal the learner interacts with
+    given:
+      - command: "apt-get install -y openssh-server"
+  - name: client
+    type: container
+    image: ubuntu:24.04
+    given:
+      - command: "ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ''"
+expected:
+  - description: "client can SSH into server without a password"
+    node: client                   # optional — defaults to primary node if omitted
+    check: "ssh -o StrictHostKeyChecking=no server 'echo ok'"
+```
+
+Rules:
+- Exactly **one** node must have `primary: true`; this node's shell is exposed in the terminal.
+- Node `name` values must be unique within a lab and are used as container/VM hostnames and DNS names within the shared network.
+- `expected.node` is optional; when omitted the check runs on the primary node.
+- A lab file must use either the flat single-node layout **or** the `nodes:` list — not both.
 
 - **FR-16** The backend watches the `labs/` directory; changes to YAML files are reflected on next page load without restarting the server.
 - **FR-17** All `expected.check` values are shell commands. The check passes if the exit code is `0`.
@@ -131,6 +169,17 @@ expected:                          # validation checks — exit 0 = pass
 - **FR-29** If a lab YAML includes a `solution` field, a "Show Solution" button is displayed below the instructions in the left panel.
 - **FR-30** The solution content is hidden by default and only revealed when the learner explicitly clicks the button.
 - **FR-31** The button label toggles between "Show Solution" and "Hide Solution" to reflect current state.
+
+### 4.8 Multi-Node Labs
+
+- **FR-32** When a lab YAML contains a `nodes:` list, the provisioner starts **all** listed containers/VMs as part of a single session.
+- **FR-33** All nodes in a multi-node lab are connected to a **dedicated Podman network** (or equivalent) created for that session. Container `name` values become DNS-resolvable hostnames within the network, enabling nodes to reach each other by name (e.g. `ssh server`, `ping client`).
+- **FR-34** Exactly one node must be marked `primary: true`. The learner's interactive terminal is attached to this node by default. For multi-node labs, the terminal panel displays a **tab bar** with one tab per declared node, allowing the learner to switch between node shells. The primary node's tab is active on load.
+- **FR-35** `given` setup commands defined on a non-primary node are executed on that node before the learner's shell is opened on the primary node.
+- **FR-36** Validation checks that include a `node:` key are executed inside the specified node's environment. Checks without a `node:` key run on the primary node.
+- **FR-37** Session teardown destroys **all** nodes and removes the shared network in a single cleanup operation.
+- **FR-38** Single-node labs (flat YAML layout) continue to work unchanged; the provisioner treats them as a single-node case with no shared network.
+- **FR-39** Environment provisioning is **asynchronous**. `POST /api/session` returns a `sessionId` immediately without waiting for provisioning to complete. The frontend polls `GET /api/session/:id/status` (returns `{ status: "pending" | "ready" | "error", message }`) and shows a spinner overlay until the session is `ready`. If provisioning fails, the overlay displays the error message.
 
 ---
 
@@ -169,24 +218,30 @@ expected:                          # validation checks — exit 0 = pass
 ```
 Browser
   │
-  ├── GET /               → Lab list page
-  ├── GET /labs/:id       → Lab page (instructions + terminal UI)
-  ├── WebSocket /ws/:sessionId  → PTY stream (terminal I/O)
-  └── POST /api/validate/:sessionId → Trigger solution check
+  ├── GET /                              → Lab list page
+  ├── GET /labs/:id                      → Lab page (instructions + terminal UI)
+  ├── GET /api/labs                      → JSON list of labs
+  ├── GET /api/labs/:id                  → Single lab metadata (incl. nodes[])
+  ├── POST /api/session                  → Start provisioning; returns sessionId immediately
+  ├── GET /api/session/:id/status        → Poll provisioning status (pending|ready|error)
+  ├── POST /api/validate/:sessionId      → Run expected checks, return pass/fail
+  ├── DELETE /api/session/:sessionId     → Tear down environment
+  └── WS /ws/:sid?node=&cols=&rows=     → PTY stream (node= selects container in multi-node)
 
-Backend (Node.js / Python)
+Backend (Node.js)
   │
   ├── Lab config loader   → Reads & watches ./labs/*.yaml
-  ├── Session manager     → Creates/destroys sessions, manages timeouts
-  ├── Provisioner         → Calls Podman CLI or libvirt to start/stop environment
-  │     ├── podman run ...        (type: container)
-  │     └── virsh / virt-install  (type: virtual-machine, Linux only)
-  ├── PTY bridge          → Attaches WebSocket to container exec shell
-  └── Validator           → Runs expected.check commands inside environment
+  ├── Session manager     → Creates/destroys sessions, manages async status, timeouts
+  ├── Provisioner         → Calls Podman CLI to start/stop environments
+  │     ├── podman run ...                      (single-node container)
+  │     ├── podman network create / run×N       (multi-node: shared network + N containers)
+  │     └── virsh / virt-install                (type: virtual-machine, Linux only)
+  ├── PTY bridge          → Attaches WebSocket to container exec shell (node-aware)
+  └── Validator           → Runs expected.check commands; routes to node: if specified
 
 ./labs/
   ├── 01-create-file.yaml
-  ├── 02-manage-permissions.yaml
+  ├── 04-hello-script.yaml
   └── ...
 ```
 
@@ -222,7 +277,7 @@ Backend (Node.js / Python)
 ```yaml
 id: create-file
 name: "Create Your First File"
-level: junior
+level: user
 description: |
   ## Objective
   Create a file named `hello.txt` inside the `/challenge` directory.
@@ -247,7 +302,7 @@ expected:
 ```yaml
 id: systemd-service
 name: "Create a systemd Service"
-level: medior
+level: admin
 description: |
   ## Objective
   Write a script that prints `hello linux` every 5 seconds and wrap it in a systemd service.
@@ -272,6 +327,48 @@ expected:
     check: "systemctl is-active hello"
   - description: "hello service must be enabled"
     check: "systemctl is-enabled hello"
+```
+
+### `labs/07-ssh-key-login.yaml` (multi-node example)
+```yaml
+id: ssh-key-login
+name: "SSH Key-Based Login"
+level: admin
+description: |
+  ## Objective
+  Configure the **server** host to accept SSH logins from **client** using
+  an ED25519 key pair — no password.
+
+  ## Hints
+  - Generate the key pair on **client** with `ssh-keygen`.
+  - Copy the public key to **server**'s `/root/.ssh/authorized_keys`.
+  - The SSH daemon on **server** is already running.
+  - From the **client** terminal: `ssh server` should drop you straight in.
+solution: |
+  ## Steps
+  1. On client: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''`
+  2. On client: `ssh-copy-id -i ~/.ssh/id_ed25519.pub root@server`
+nodes:
+  - name: server
+    type: container
+    image: ubuntu:24.04
+    primary: true
+    given:
+      - command: "apt-get update -qq && apt-get install -y openssh-server"
+      - command: "service ssh start"
+      - command: "mkdir -p /root/.ssh && chmod 700 /root/.ssh"
+  - name: client
+    type: container
+    image: ubuntu:24.04
+    given:
+      - command: "apt-get update -qq && apt-get install -y openssh-client"
+      - command: "ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ''"
+expected:
+  - description: "SSH daemon is running on server"
+    check: "pgrep -x sshd"
+  - description: "client can log in to server without a password"
+    node: client
+    check: "ssh -o StrictHostKeyChecking=no -o BatchMode=yes server 'echo ok'"
 ```
 
 ---
@@ -338,3 +435,8 @@ expected:
 | AC-10 | Two concurrent learner sessions for the same lab run in completely separate containers. |
 | AC-11 | All `given` setup commands run successfully before the learner's shell is ready. |
 | AC-12 | The platform requires no host dependency other than Podman (container labs) and optionally virt-manager / libvirt (VM labs on Linux). |
+| AC-13 | A multi-node lab provisions all declared nodes, connects them to a shared network, and tears all of them down together when the session ends. |
+| AC-14 | Nodes in a multi-node lab can resolve each other by `name` over the shared network (e.g. `ping client` from the server node succeeds). |
+| AC-15 | Validation checks with `node: <name>` run inside the specified node's environment; checks without `node:` run on the primary node. |
+| AC-16 | For multi-node labs, the terminal panel displays a tab bar with one tab per node; clicking a tab switches the active shell. |
+| AC-17 | `POST /api/session` returns a session ID immediately; a spinner overlay is shown while the backend provisions the environment. The overlay disappears only once the status endpoint reports `ready`. |

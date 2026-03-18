@@ -7,6 +7,12 @@
 			"command": "node src/server.js",
 			"isBackground": true,
 			"problemMatcher": []
+		},
+		{
+			"label": "Start hello-linux",
+			"type": "shell",
+			"command": "node src/server.js",
+			"isBackground": true
 		}
 	]
 }

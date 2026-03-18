@@ -82,13 +82,14 @@
         <span class="terminal-dot dot-yellow"></span>
         <span class="terminal-dot dot-green"></span>
         <span class="terminal-label" id="terminal-label">bash</span>
+        <div id="terminal-tabs" class="terminal-tabs"></div>
       </div>
 
       <div id="terminal-container"></div>
     </section>
   </div>
 
-  <!-- Confetti canvas (pass celebration) -->
+  <!-- Matrix rain canvas (pass celebration) -->
   <canvas id="confetti-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:999;display:none"></canvas>
 
   <script>
@@ -99,6 +100,9 @@
     let   fitAddon  = null;
     let   ws        = null;
     let   cleanedUp = false;
+    // Multi-node tabs
+    let   tabs      = [];   // [{ name, primary, term, fitAddon, ws, paneEl, tabBtn }]
+    let   activeTab = null;
 
     const overlay     = document.getElementById('terminal-overlay');
     const statusText  = document.getElementById('status-text');
@@ -135,10 +139,13 @@
         document.getElementById('lab-solution').innerHTML = marked.parse(lab.solution);
         document.getElementById('lab-solution-wrap').style.display = '';
       }
-      document.getElementById('terminal-label').textContent = `${lab.image} — bash`;
-
-      // 2. Create terminal (hidden until connected)
-      initTerminal();
+      // 2. Create terminal(s)
+      if (lab.nodes && lab.nodes.length > 0) {
+        initMultiNodeTerminals(lab.nodes);
+      } else {
+        document.getElementById('terminal-label').textContent = `${lab.image} — bash`;
+        initTerminal();
+      }
 
       // 3. Provision environment
       setStatus('Provisioning lab environment…');
@@ -156,35 +163,49 @@
         return;
       }
 
-      // 4. Connect WebSocket
+      // 4. Poll until environment is ready
+      try {
+        await waitForSession(sessionId);
+      } catch (err) {
+        showFatalError(err.message);
+        return;
+      }
+
+      // 5. Connect WebSocket(s)
       setStatus('Connecting terminal…');
-      connectWs();
+      if (tabs.length > 0) {
+        connectAllTabWs();
+      } else {
+        connectWs();
+      }
     }
 
     // ── xterm.js ─────────────────────────────────────────────────────────────
+    const TERM_OPTIONS = {
+      cursorBlink: true,
+      fontSize:    14,
+      fontFamily:  "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      theme: {
+        background:          '#1e1e2e',
+        foreground:          '#cdd6f4',
+        cursor:              '#f5e0dc',
+        cursorAccent:        '#1e1e2e',
+        selectionBackground: '#585b7066',
+        black:               '#45475a', brightBlack:   '#585b70',
+        red:                 '#f38ba8', brightRed:     '#f38ba8',
+        green:               '#a6e3a1', brightGreen:   '#a6e3a1',
+        yellow:              '#f9e2af', brightYellow:  '#f9e2af',
+        blue:                '#89b4fa', brightBlue:    '#89b4fa',
+        magenta:             '#f5c2e7', brightMagenta: '#f5c2e7',
+        cyan:                '#89dceb', brightCyan:    '#89dceb',
+        white:               '#bac2de', brightWhite:   '#a6adc8',
+      },
+      allowTransparency: false,
+      scrollback:        3000,
+    };
+
     function initTerminal() {
-      term = new Terminal({
-        cursorBlink: true,
-        fontSize:    14,
-        fontFamily:  "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-        theme: {
-          background:          '#1e1e2e',
-          foreground:          '#cdd6f4',
-          cursor:              '#f5e0dc',
-          cursorAccent:        '#1e1e2e',
-          selectionBackground: '#585b7066',
-          black:               '#45475a', brightBlack:   '#585b70',
-          red:                 '#f38ba8', brightRed:     '#f38ba8',
-          green:               '#a6e3a1', brightGreen:   '#a6e3a1',
-          yellow:              '#f9e2af', brightYellow:  '#f9e2af',
-          blue:                '#89b4fa', brightBlue:    '#89b4fa',
-          magenta:             '#f5c2e7', brightMagenta: '#f5c2e7',
-          cyan:                '#89dceb', brightCyan:    '#89dceb',
-          white:               '#bac2de', brightWhite:   '#a6adc8',
-        },
-        allowTransparency: false,
-        scrollback:        3000,
-      });
+      term = new Terminal(TERM_OPTIONS);
 
       fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
@@ -264,7 +285,7 @@
         if (data.passed) {
           resultEl.className = 'result result-pass visible';
           resultEl.innerHTML = '✅ All checks passed! Great work!';
-          launchConfetti();
+          launchMatrixRain();
         } else {
           const lines = (data.results || [])
             .filter(c => !c.passed)
@@ -286,9 +307,12 @@
     function cleanup() {
       if (cleanedUp || !sessionId) return;
       cleanedUp = true;
-      // sendBeacon is the most reliable way to fire-and-forget on page unload
       navigator.sendBeacon(`/api/session/${sessionId}/destroy`);
-      if (ws) ws.close();
+      if (tabs.length > 0) {
+        for (const tab of tabs) { try { tab.ws?.close(); } catch (_) {} }
+      } else if (ws) {
+        ws.close();
+      }
     }
 
     window.addEventListener('pagehide', cleanup);
@@ -320,63 +344,191 @@
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // ── Confetti ──────────────────────────────────────────────────────────────
-    function launchConfetti() {
+    // ── Matrix Rain ───────────────────────────────────────────────────────────
+    function launchMatrixRain() {
       const canvas = document.getElementById('confetti-canvas');
       const ctx    = canvas.getContext('2d');
       canvas.width  = window.innerWidth;
       canvas.height = window.innerHeight;
       canvas.style.display = '';
 
-      const COLORS  = ['#d9a441', '#c97a40', '#4ade80', '#60a5fa', '#f472b6', '#a78bfa', '#fff'];
-      const COUNT   = 120;
-      const gravity = 0.45;
-      const drag    = 0.97;
+      const CHARS   = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF';
+      const FONT_SZ = 16;
+      const cols    = Math.floor(canvas.width / FONT_SZ);
+      const drops   = Array.from({ length: cols }, () => Math.random() * -50);
 
-      const pieces = Array.from({ length: COUNT }, () => ({
-        x:    Math.random() * canvas.width,
-        y:    Math.random() * canvas.height * 0.4 - canvas.height * 0.1,
-        vx:   (Math.random() - 0.5) * 9,
-        vy:   Math.random() * -10 - 4,
-        w:    Math.random() * 10 + 5,
-        h:    Math.random() * 5  + 3,
-        rot:  Math.random() * Math.PI * 2,
-        spin: (Math.random() - 0.5) * 0.25,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)],
-        alpha: 1,
-      }));
+      const DURATION = 4500; // ms total
+      const FADE_AT  = 3000; // ms before end to start fading canvas out
+      const start    = performance.now();
+      let   frame;
 
-      let frame;
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        let alive = false;
-        for (const p of pieces) {
-          p.vy  += gravity;
-          p.vx  *= drag;
-          p.x   += p.vx;
-          p.y   += p.vy;
-          p.rot += p.spin;
-          if (p.y > canvas.height * 0.6) p.alpha -= 0.025;
-          if (p.alpha <= 0) continue;
-          alive = true;
-          ctx.save();
-          ctx.globalAlpha = Math.max(0, p.alpha);
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.rot);
-          ctx.fillStyle = p.color;
-          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-          ctx.restore();
-        }
-        if (alive) {
-          frame = requestAnimationFrame(draw);
-        } else {
+      function draw(now) {
+        const elapsed = now - start;
+        if (elapsed >= DURATION) {
           canvas.style.display = 'none';
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return;
         }
+
+        // Global alpha fades out in final FADE_AT window
+        const fadeProgress = Math.max(0, elapsed - (DURATION - FADE_AT)) / FADE_AT;
+        ctx.globalAlpha = 1 - fadeProgress;
+
+        // Trail: semi-transparent black overlay
+        ctx.fillStyle = 'rgba(28,28,28,0.18)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.font      = `bold ${FONT_SZ}px monospace`;
+
+        for (let i = 0; i < drops.length; i++) {
+          const char = CHARS[Math.floor(Math.random() * CHARS.length)];
+          const x    = i * FONT_SZ;
+          const y    = drops[i] * FONT_SZ;
+
+          // Head glyph: bright white
+          ctx.fillStyle = '#e0ffe0';
+          ctx.fillText(char, x, y);
+
+          // Body glyph drawn on next tick (trail handles it via overlay)
+          // Accent: random glyphs get gold highlight
+          if (Math.random() < 0.04) {
+            ctx.fillStyle = '#d9a441';
+            ctx.fillText(char, x, y);
+          } else {
+            ctx.fillStyle = '#00cc44';
+            ctx.fillText(char, x, y + FONT_SZ);
+          }
+
+          if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+          drops[i] += 0.5;
+        }
+
+        frame = requestAnimationFrame(draw);
       }
 
       cancelAnimationFrame(frame);
-      draw();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      frame = requestAnimationFrame(draw);
+    }
+
+    // ── Multi-node terminals ─────────────────────────────────────────────────────
+    function initMultiNodeTerminals(nodes) {
+      const container = document.getElementById('terminal-container');
+      const tabBar    = document.getElementById('terminal-tabs');
+      document.getElementById('terminal-label').style.display = 'none';
+
+      for (const node of nodes) {
+        // Tab button
+        const tabBtn = document.createElement('button');
+        tabBtn.className   = 'terminal-tab' + (node.primary ? ' active' : '');
+        tabBtn.textContent = node.name;
+        tabBtn.onclick     = () => switchTab(node.name);
+        tabBar.appendChild(tabBtn);
+
+        // Pane (all panes overlap via position:absolute inset:0)
+        const paneEl = document.createElement('div');
+        paneEl.className = 'terminal-pane' + (node.primary ? ' active' : '');
+        container.appendChild(paneEl);
+
+        // Dedicated xterm instance per node
+        const t  = new Terminal(TERM_OPTIONS);
+        const fa = new FitAddon.FitAddon();
+        t.loadAddon(fa);
+        t.open(paneEl);
+        fa.fit();
+
+        tabs.push({ name: node.name, primary: !!node.primary, term: t, fitAddon: fa, ws: null, paneEl, tabBtn });
+      }
+
+      activeTab = tabs.find(t => t.primary) || tabs[0];
+
+      // All panes share the same container size — re-fit all on resize
+      const ro = new ResizeObserver(() => { for (const tab of tabs) tab.fitAddon.fit(); });
+      ro.observe(container);
+    }
+
+    function switchTab(nodeName) {
+      const tab = tabs.find(t => t.name === nodeName);
+      if (!tab || tab === activeTab) return;
+      if (activeTab) {
+        activeTab.paneEl.classList.remove('active');
+        activeTab.tabBtn.classList.remove('active');
+      }
+      tab.paneEl.classList.add('active');
+      tab.tabBtn.classList.add('active');
+      activeTab = tab;
+      requestAnimationFrame(() => { tab.fitAddon.fit(); tab.term.focus(); });
+    }
+
+    function connectAllTabWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+      for (const tab of tabs) {
+        const cols  = tab.term.cols || 80;
+        const rows  = tab.term.rows || 24;
+        const tabWs = new WebSocket(
+          `${proto}//${location.host}/ws/${sessionId}?node=${encodeURIComponent(tab.name)}&cols=${cols}&rows=${rows}`
+        );
+        tab.ws = tabWs;
+
+        tabWs.onopen = () => {
+          if (tab.primary) {
+            hideOverlay();
+            checkBtn.disabled = false;
+            activeTab.fitAddon.fit();
+            activeTab.term.focus();
+          }
+        };
+
+        const t = tab;
+        tabWs.onmessage = evt => {
+          try {
+            const msg = JSON.parse(evt.data);
+            if (msg.type === 'data')      t.term.write(msg.data);
+            else if (msg.type === 'exit') t.term.write(`\r\n\x1b[90m[Process exited with code ${msg.exitCode}]\x1b[0m\r\n`);
+          } catch (_) { t.term.write(evt.data); }
+        };
+
+        tabWs.onclose = () => {
+          if (!cleanedUp) t.term.write('\r\n\x1b[90m[Connection closed]\x1b[0m\r\n');
+          if (t.primary) checkBtn.disabled = true;
+        };
+        tabWs.onerror = () => t.term.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
+
+        tab.term.onData(data => {
+          if (tabWs.readyState === WebSocket.OPEN)
+            tabWs.send(JSON.stringify({ type: 'input', data }));
+        });
+
+        tab.term.onResize(({ cols, rows }) => {
+          if (tabWs.readyState === WebSocket.OPEN)
+            tabWs.send(JSON.stringify({ type: 'resize', cols, rows }));
+        });
+      }
+    }
+
+    // ── Session readiness polling ─────────────────────────────────────────────────────
+    async function waitForSession(sid, timeoutMs = 180000, intervalMs = 1500) {
+      const deadline = Date.now() + timeoutMs;
+      const dots = ['⣻', '⢿', '⠿', '⣿'];
+      let   di   = 0;
+      while (Date.now() < deadline) {
+        let data;
+        try {
+          const r = await fetch(`/api/session/${sid}/status`);
+          data = await r.json();
+        } catch (_) {
+          // network hiccup — keep trying
+          await new Promise(r => setTimeout(r, intervalMs));
+          continue;
+        }
+        if (data.status === 'ready')  return;
+        if (data.status === 'error')  throw new Error(data.message || 'Provisioning failed');
+        // still pending — show animated dots
+        setStatus(`${dots[di++ % dots.length]}  Provisioning lab environment…`);
+        await new Promise(r => setTimeout(r, intervalMs));
+      }
+      throw new Error('Timed out waiting for lab environment (3 min)');
     }
 
     function toggleSolution() {

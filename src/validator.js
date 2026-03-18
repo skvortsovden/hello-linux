@@ -46,6 +46,17 @@ async function validate(session) {
       if (env.type === 'container') {
         await execAsync(`"${PODMAN_BIN}" exec "${env.containerId}" sh -c ${JSON.stringify(command)}`);
         passed = true;
+      } else if (env.type === 'multi') {
+        // Route check to the specified node, or fall back to the primary node
+        let targetNode;
+        if (check.node) {
+          targetNode = env.nodes.find(n => n.name === check.node);
+          if (!targetNode) throw new Error(`Node "${check.node}" not found in session`);
+        } else {
+          targetNode = env.nodes.find(n => n.primary);
+        }
+        await execAsync(`"${PODMAN_BIN}" exec "${targetNode.containerId}" sh -c ${JSON.stringify(command)}`);
+        passed = true;
       } else if (env.type === 'vm') {
         const agentCmd = JSON.stringify({
           execute: 'guest-exec',

@@ -34,12 +34,12 @@ Open **http://localhost:3000** in your browser.
 
 Drop a `.yaml` file into the `labs/` directory — no server restart needed (the server watches for changes).
 
-Minimal lab schema:
+### Single-node lab
 
 ```yaml
 id: my-lab-id           # used in URL: /labs/my-lab-id
 name: "My Lab Name"
-level: junior           # junior | medior | senior (shown as a badge)
+level: user             # user | admin | root (shown as a badge)
 description: |          # Markdown, shown in the left panel
   ## Objective
   Do something useful.
@@ -51,6 +51,37 @@ expected:                # validation checks (exit 0 = pass)
   - description: "File must exist"
     check: "test -f /challenge/result.txt"
 ```
+
+### Multi-node lab (two or more containers on a shared network)
+
+```yaml
+id: my-multi-lab
+name: "My Multi-Node Lab"
+level: admin
+description: |
+  ## Objective
+  Do something across two hosts.
+nodes:
+  - name: server          # becomes the container hostname + DNS name
+    type: container
+    image: ubuntu:24.04
+    primary: true         # this node's shell is shown in the terminal
+    given:
+      - command: "apt-get install -y openssh-server && /usr/sbin/sshd"
+  - name: client
+    type: container
+    image: ubuntu:24.04
+    given:
+      - command: "ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_ed25519"
+expected:
+  - description: "sshd is running on server"
+    check: "pgrep -x sshd"          # runs on primary node by default
+  - description: "client can SSH in"
+    node: client                     # run this check on the 'client' node
+    check: "ssh -o BatchMode=yes -o StrictHostKeyChecking=no root@server 'echo ok'"
+```
+
+For multi-node labs the terminal shows a **tab bar** — one tab per node — so learners can switch between hosts.
 
 ---
 
@@ -67,21 +98,24 @@ expected:                # validation checks (exit 0 = pass)
 
 ```
 Browser
-  ├── GET  /                        → Lab list (index.html)
-  ├── GET  /labs/:id                → Lab page (lab.html)
-  ├── GET  /api/labs                → JSON list of labs
-  ├── POST /api/session             → Provision environment, return sessionId
-  ├── POST /api/validate/:sid       → Run expected checks, return pass/fail
-  ├── DELETE /api/session/:sid      → Tear down environment
-  └── WS   /ws/:sid?cols=&rows=    → PTY stream (xterm.js ↔ node-pty ↔ podman exec)
+  ├── GET  /                              → Lab list (index.html)
+  ├── GET  /labs/:id                      → Lab page (lab.html)
+  ├── GET  /api/labs                      → JSON list of labs
+  ├── GET  /api/labs/:id                  → Single lab metadata (incl. nodes[])
+  ├── POST /api/session                   → Start provisioning, return sessionId immediately
+  ├── GET  /api/session/:id/status        → Poll provisioning status (pending|ready|error)
+  ├── POST /api/validate/:sid             → Run expected checks, return pass/fail
+  ├── DELETE /api/session/:sid            → Tear down environment
+  └── WS   /ws/:sid?node=&cols=&rows=    → PTY stream (xterm.js ↔ node-pty ↔ podman exec)
+                                            node= selects which container in multi-node labs
 
 src/
   ├── server.js         Express + WebSocket routing
   ├── labLoader.js      YAML parser + chokidar file watcher
   ├── sessionManager.js Session lifecycle & inactivity timeout
-  ├── provisioner.js    podman run / virsh provisioning
-  ├── ptyBridge.js      WebSocket ↔ node-pty ↔ container shell
-  └── validator.js      Runs expected.check commands, returns pass/fail
+  ├── provisioner.js    podman run / virsh / multi-node network provisioning
+  ├── ptyBridge.js      WebSocket ↔ node-pty ↔ container shell (node-aware)
+  └── validator.js      Runs expected.check commands, supports node: routing
 
 labs/                   One .yaml file per lab
 public/                 Static frontend (no build step)
@@ -94,12 +128,15 @@ public/                 Static frontend (no build step)
 ```
 hello-linux/
 ├── labs/
-│   ├── 01-create-file.yaml
-│   ├── 02-file-permissions.yaml
-│   └── 03-write-to-file.yaml
+│   ├── 01-create-file.yaml          (user)
+│   ├── 04-hello-script.yaml         (user)
+│   ├── 04-systemd-service.yaml      (admin)
+│   ├── 05-socket-activation.yaml    (root)
+│   ├── 06-ssh-server.yaml           (admin)
+│   └── 07-ssh-key-login.yaml        (admin, multi-node)
 ├── public/
 │   ├── index.html      (lab list)
-│   ├── lab.html        (lab page + terminal)
+│   ├── lab.html        (lab page + terminal + tab bar)
 │   └── style.css
 ├── src/
 │   ├── server.js
