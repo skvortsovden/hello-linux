@@ -126,11 +126,21 @@
       document.getElementById('lab-name').textContent = lab.name;
 
       const level = (lab.level || '').toLowerCase();
+      let lastBadgeAnchor = document.getElementById('lab-name');
       if (level) {
-        const levelBadge = document.createElement('span');
-        levelBadge.textContent = level.charAt(0).toUpperCase() + level.slice(1);
-        levelBadge.className   = `badge badge-${level}`;
-        document.getElementById('lab-name').after(levelBadge);
+        const b = document.createElement('span');
+        b.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+        b.className   = `badge badge-${level}`;
+        lastBadgeAnchor.after(b);
+        lastBadgeAnchor = b;
+      }
+      for (const g of (lab.groups || [])) {
+        const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const b = document.createElement('span');
+        b.textContent = g.toUpperCase();
+        b.className   = `badge badge-group badge-${slug}`;
+        lastBadgeAnchor.after(b);
+        lastBadgeAnchor = b;
       }
 
       document.getElementById('lab-description').innerHTML =

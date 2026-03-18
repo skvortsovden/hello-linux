@@ -14,6 +14,7 @@ solution: |
      ```
 
 level: user
+groups: [basics]
 nodes:
   - name: node
     type: container

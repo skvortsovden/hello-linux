@@ -116,9 +116,9 @@ a:hover { color: var(--accent-hover); }
 
 .lab-card-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .lab-card h2 {
@@ -145,6 +145,50 @@ a:hover { color: var(--accent-hover); }
 .badge-user    { background: rgba(74, 222, 128, 0.10); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.25); }
 .badge-admin   { background: rgba(217, 164, 65, 0.12);  color: var(--accent); border: 1px solid rgba(217, 164, 65, 0.30); }
 .badge-root    { background: rgba(201, 122, 64, 0.12);  color: var(--accent-hover); border: 1px solid rgba(201, 122, 64, 0.30); }
+
+/* Group badges — all groups share one colour */
+.badge-group { background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.25); }
+
+/* Badge row — multiple badges side by side */
+.badge-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Smaller badges inside lab cards */
+.lab-card .badge {
+  font-size: 0.62rem;
+  padding: 2px 7px;
+  letter-spacing: 0.04em;
+}
+
+/* Group filter bar */
+.lab-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.filter-btn:hover  { color: var(--text); border-color: #555; }
+.filter-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(217, 164, 65, 0.08); }
 
 .lab-card-desc {
   color: var(--text-dim);

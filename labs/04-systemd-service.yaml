@@ -52,6 +52,7 @@ solution: |
   ```
 
 level: admin
+groups: [lfcs, systemd]
 nodes:
   - name: node
     type: container

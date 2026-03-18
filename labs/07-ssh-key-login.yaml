@@ -1,6 +1,7 @@
 id: ssh-key-login
 name: "SSH Key-Based Login Between Two Hosts"
 level: admin
+groups: [lfcs, ssh]
 description: |
   ## Objective
   Set up passwordless SSH login from **client** to **server** using an

@@ -38,6 +38,7 @@ app.get('/api/labs', (_req, res) => {
       description: lab.description,
       type:        primaryNode.type,
       level:       lab.level,
+      groups:      lab.groups || [],
     };
   });
   res.json(list);
@@ -54,6 +55,7 @@ app.get('/api/labs/:id', (req, res) => {
     description: lab.description,
     solution:    lab.solution,
     level:       lab.level,
+    groups:      lab.groups || [],
     image:       primaryNode.image,
     nodes:       lab.nodes.map(n => ({ name: n.name, primary: !!n.primary })),
   });

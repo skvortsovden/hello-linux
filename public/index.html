@@ -25,12 +25,18 @@
     <p>Hands-on exercises in real, isolated Linux environments — all in your browser.</p>
   </section>
 
+  <!-- Group filters -->
+  <div class="lab-filter-bar" id="lab-filter-bar"></div>
+
   <!-- Lab grid -->
   <main class="labs-grid" id="labs-grid">
     <!-- populated by JS -->
   </main>
 
   <script>
+    let allLabs    = [];
+    let activeGroup = null;
+
     async function loadLabs() {
       const grid = document.getElementById('labs-grid');
 
@@ -44,51 +50,10 @@
       `).join('');
 
       try {
-        const res  = await fetch('/api/labs');
-        const labs = await res.json();
-
-        if (!labs.length) {
-          grid.innerHTML = `
-            <div class="empty-state" style="grid-column:1/-1">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                <polyline points="13 2 13 9 20 9"></polyline>
-              </svg>
-              <h2>No labs found</h2>
-              <p>Add <code>.yaml</code> files to the <code>labs/</code> directory to get started.</p>
-            </div>`;
-          return;
-        }
-
-        grid.innerHTML = labs.map(lab => {
-          const level      = (lab.level || '').toLowerCase();
-          const levelLabel = level ? (level.charAt(0).toUpperCase() + level.slice(1)) : null;
-          const levelClass = level ? `badge-${level}` : 'badge-unknown';
-
-          // Strip markdown for preview
-          const plainDesc = (lab.description || '')
-            .replace(/#{1,6}\s/g, '')
-            .replace(/[*_`]/g, '')
-            .trim();
-
-          return `
-            <div class="lab-card" onclick="location.href='/labs/${lab.id}'" role="link" tabindex="0"
-                 onkeydown="if(event.key==='Enter')location.href='/labs/${lab.id}'">
-              <div class="lab-card-header">
-                <h2>${escHtml(lab.name)}</h2>
-                ${levelLabel ? `<span class="badge ${levelClass}">${escHtml(levelLabel)}</span>` : ''}
-              </div>
-              <p class="lab-card-desc">${escHtml(plainDesc)}</p>
-              <div class="lab-card-arrow">
-                Start lab
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                  <polyline points="12 5 19 12 12 19"></polyline>
-                </svg>
-              </div>
-            </div>`;
-        }).join('');
-
+        const res = await fetch('/api/labs');
+        allLabs   = await res.json();
+        buildFilters();
+        renderCards(allLabs);
       } catch (err) {
         grid.innerHTML = `
           <div class="empty-state" style="grid-column:1/-1">
@@ -96,6 +61,84 @@
             <p>${escHtml(err.message)}</p>
           </div>`;
       }
+    }
+
+    function buildFilters() {
+      const bar    = document.getElementById('lab-filter-bar');
+      const groups = [...new Set(allLabs.flatMap(l => l.groups || []))].sort();
+      if (!groups.length) { bar.style.display = 'none'; return; }
+
+      bar.innerHTML = [
+        `<button class="filter-btn active" data-group="">All</button>`,
+        ...groups.map(g => {
+          const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          return `<button class="filter-btn badge-group badge-${escHtml(slug)}" data-group="${escHtml(g)}">${escHtml(g.toUpperCase())}</button>`;
+        }),
+      ].join('');
+
+      bar.addEventListener('click', e => {
+        const btn = e.target.closest('.filter-btn');
+        if (!btn) return;
+        bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeGroup = btn.dataset.group || null;
+        renderCards(activeGroup
+          ? allLabs.filter(l => (l.groups || []).includes(activeGroup))
+          : allLabs);
+      });
+    }
+
+    function renderCards(labs) {
+      const grid = document.getElementById('labs-grid');
+
+      if (!labs.length) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+              <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+            <h2>No labs found</h2>
+            <p>Add <code>.yaml</code> files to the <code>labs/</code> directory to get started.</p>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = labs.map(lab => {
+        const level      = (lab.level || '').toLowerCase();
+        const levelLabel = level ? (level.charAt(0).toUpperCase() + level.slice(1)) : null;
+        const levelClass = level ? `badge-${level}` : 'badge-unknown';
+        const groupBadges = (lab.groups || []).map(g => {
+          const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          return `<span class="badge badge-group badge-${escHtml(slug)}">${escHtml(g.toUpperCase())}</span>`;
+        }).join('');
+
+        // Strip markdown for preview
+        const plainDesc = (lab.description || '')
+          .replace(/#{1,6}\s/g, '')
+          .replace(/[*_`]/g, '')
+          .trim();
+
+        return `
+          <div class="lab-card" onclick="location.href='/labs/${lab.id}'" role="link" tabindex="0"
+               onkeydown="if(event.key==='Enter')location.href='/labs/${lab.id}'">
+            <div class="lab-card-header">
+              <h2>${escHtml(lab.name)}</h2>
+              <div class="badge-row">
+                ${levelLabel ? `<span class="badge ${levelClass}">${escHtml(levelLabel)}</span>` : ''}
+                ${groupBadges}
+              </div>
+            </div>
+            <p class="lab-card-desc">${escHtml(plainDesc)}</p>
+            <div class="lab-card-arrow">
+              Start lab
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </div>
+          </div>`;
+      }).join('');
     }
 
     function escHtml(str) {
