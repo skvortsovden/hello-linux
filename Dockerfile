@@ -1,20 +1,22 @@
 # syntax=docker/dockerfile:1
 
-# Grab just the docker CLI binary — no need to install the full package
+# ---- stage 1: build ----
+# Full image has Python / make / g++ needed to compile node-pty's native addon.
+FROM node:20 AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# ---- stage 2: runtime ----
+# Grab just the docker CLI binary from the official image.
 FROM docker:cli AS docker-cli
 
 FROM node:20-slim
-# node-pty uses prebuilt binaries for linux/amd64 and linux/arm64 — no
-# compilation needed.
-COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
-
 WORKDIR /app
 
-# Install dependencies
-COPY package.json ./
-RUN npm install --omit=dev
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=builder    /app/node_modules      ./node_modules
 
-# Copy application source
 COPY src/     ./src/
 COPY public/  ./public/
 COPY labs/    ./labs/
