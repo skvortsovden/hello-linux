@@ -3,12 +3,12 @@ FROM node:20-slim
 
 # ---------------------------------------------------------------------------
 # System deps
-#   - python3 / make / g++   → compile node-pty native addon
 #   - ca-certificates / curl  → fetch Docker GPG key
 #   - docker-ce-cli           → container management (talks to host socket)
+# node-pty uses prebuilt binaries for linux/amd64 and linux/arm64 — no
+# compilation (python3/make/g++) needed.
 # ---------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3 make g++ \
       ca-certificates curl gnupg \
   && install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://download.docker.com/linux/debian/gpg \
