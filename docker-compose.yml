@@ -4,8 +4,16 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Give the app access to the host's Docker daemon
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker:  /var/run/docker.sock
+      # Podman (rootless): /run/user/<uid>/podman/podman.sock
+      # Map whichever socket exists on the host to the path the app expects.
+      - ${CONTAINER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      # libvirt socket — needed for VM labs (virt-install / virsh)
+      - /var/run/libvirt/libvirt.sock:/var/run/libvirt/libvirt.sock
+      # Base disk images for VM labs
+      - /var/lib/hello-linux/images:/var/lib/hello-linux/images:ro
+      # Writable scratch space for per-session disk copies
+      - /tmp/hello-linux:/tmp
       # Hot-reload labs without rebuilding the image
       - ./labs:/app/labs:ro
     environment:

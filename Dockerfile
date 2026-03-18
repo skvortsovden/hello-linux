@@ -17,6 +17,11 @@ WORKDIR /app
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=builder    /app/node_modules      ./node_modules
 
+# virtinst (virt-install) + libvirt-clients (virsh) for VM labs
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends virtinst libvirt-clients \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY src/     ./src/
 COPY public/  ./public/
 COPY labs/    ./labs/
